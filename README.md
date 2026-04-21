@@ -27,7 +27,7 @@ If you're not sure which device is your card, stop and verify first.
 
 ```text
 cardnuke/
-├── cardnuke.py   # Main interactive toolkit (Linux + Windows-aware branches)
+├── cardnuke.py   # Main interactive toolkit (Linux + Windows terminal-native)
 ├── cardnuke.sh   # Linux quick-format helper
 └── README.md
 ```
@@ -61,7 +61,19 @@ Optional but recommended:
 
 ### Windows
 
-`cardnuke.py` contains Windows-specific paths for some operations, but the complete workflow is currently Linux-first.
+Terminal-native workflow is available through `cardnuke.py` using built-in Windows CLI tooling plus Python:
+
+- `powershell`, `diskpart`, `chkdsk`, `mountvol`
+- Run from an elevated terminal (`Run as administrator`)
+- Device targets are disk numbers like `2` or raw paths like `\\.\PhysicalDrive2`
+
+Filesystem support in Windows native mode:
+
+- `fat32`
+- `exfat`
+- `ntfs`
+
+`ext4` remains Linux-only because Windows does not provide native `ext4` formatting tools.
 
 ## Running
 
@@ -74,6 +86,19 @@ sudo python3 cardnuke.py /dev/sdb
 
 # Lightweight shell variant
 sudo bash cardnuke.sh /dev/sdb
+```
+
+Windows:
+
+```powershell
+# Interactive
+python cardnuke.py
+
+# Direct disk target
+python cardnuke.py 2
+
+# Or by raw device path
+python cardnuke.py \\.\PhysicalDrive2
 ```
 
 ## `cardnuke.py` modes
@@ -127,5 +152,6 @@ Each run creates a timestamped log in home:
 ## Notes
 
 - Use whole-device nodes (like `/dev/sdb`) for format/restore paths.
-- NVMe/MMC partition naming is handled automatically.
+- NVMe/MMC partition naming is handled automatically on Linux.
+- Windows raw-disk operations can be slow on large media because backup, restore, and overwrite passes stream through the device directly from the terminal workflow.
 - Recovery quality depends on overwrite history and physical card health.

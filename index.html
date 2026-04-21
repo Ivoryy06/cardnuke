@@ -73,6 +73,7 @@
     .guide-step .num { width: 24px; height: 24px; border-radius: 50%; background: var(--border); color: var(--accent); font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
     .guide-step .body { flex: 1; }
     .guide-step .body p { font-size: 0.85rem; margin-bottom: 4px; }
+    .note { font-size: 0.8rem; color: var(--muted); line-height: 1.4; margin-top: 0.5rem; }
     pre { background: var(--code-bg); border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 0.78rem; overflow-x: auto; color: var(--text); font-family: monospace; }
     code { font-family: monospace; }
   </style>
@@ -95,7 +96,7 @@ const data = {
     scripts: 2,
     modes: 8,
     formatLevels: 4,
-    platforms: 'Linux + partial Windows',
+    platforms: 'Linux + Windows',
     mode: localMode
   },
   checks: [
@@ -138,7 +139,7 @@ app.innerHTML = `
     <h2>🔗 Connected Web + Program</h2>
     <div class="bullet-list">
       <div>The web dashboard documents and links directly to the executable tooling files.</div>
-      <div>Use this page for guidance, then run the same scripts locally with root/administrator privileges.</div>
+      <div>Use this page for guidance, then run the same terminal workflow locally with root or administrator privileges.</div>
     </div>
     <div class="link-row">
       <a class="link-pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank">GitHub repo</a>
@@ -167,7 +168,7 @@ app.innerHTML = `
         <h3>Pros</h3>
         <div class="bullet-list">
           <div>- End-to-end workflow in one place</div>
-          <div>- Linux path is practical and complete</div>
+          <div>- Linux and Windows both have terminal-native flows</div>
           <div>- Interactive confirmations reduce accidental misuse</div>
           <div>- Works well for repeated SD/USB maintenance tasks</div>
         </div>
@@ -177,7 +178,7 @@ app.innerHTML = `
         <div class="bullet-list">
           <div>- Destructive by design if wrong disk is selected</div>
           <div>- Some features rely on optional external tools</div>
-          <div>- Windows support is partial compared to Linux</div>
+          <div>- Windows native mode is limited to fat32/exfat/ntfs</div>
           <div>- No GUI safeguards beyond terminal prompts</div>
         </div>
       </div>
@@ -269,8 +270,17 @@ python .\cardnuke.py</pre>
       <div class="guide-step">
         <div class="num">4</div>
         <div class="body">
+          <p>Pass a disk number directly when needed</p>
+          <pre>python .\cardnuke.py 2
+python .\cardnuke.py \\.\PhysicalDrive2</pre>
+        </div>
+      </div>
+      <div class="guide-step">
+        <div class="num">5</div>
+        <div class="body">
           <p>Verify target disk before destructive confirmation</p>
           <pre>Get-Disk | Format-Table Number,FriendlyName,Size,PartitionStyle</pre>
+          <div class="note">Windows native formatting supports <code>fat32</code>, <code>exfat</code>, and <code>ntfs</code>. Use Linux for <code>ext4</code>.</div>
         </div>
       </div>
     </div>
