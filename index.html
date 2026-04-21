@@ -59,9 +59,6 @@
     .check-row .icon { font-size: 1rem; width: 1.2rem; text-align: center; }
     .check-row .name { flex: 1; }
     .check-row .reason { font-size: 0.75rem; color: var(--muted); }
-    .link-list { display: flex; flex-wrap: wrap; gap: 8px; }
-    .link-pill { border: 0.5px solid var(--border); background: var(--code-bg); color: var(--text); padding: 6px 10px; border-radius: 999px; font-size: 0.78rem; text-decoration: none; }
-    .link-pill:hover { filter: brightness(0.97); }
 
     .guide { display: flex; flex-direction: column; gap: 1rem; }
     .guide-step { display: flex; gap: 12px; }
@@ -83,16 +80,13 @@
 <script>
 const now = new Date();
 document.getElementById('gen-time').textContent = 'generated ' + now.toLocaleString();
-const isLocal = location.protocol === 'file:';
-const hostLabel = isLocal ? 'Local file mode' : location.host;
 
 const data = {
   stats: {
     scripts: 2,
     modes: 8,
     formatLevels: 4,
-    platforms: 'Linux + partial Windows',
-    localState: isLocal ? 'local' : 'hosted'
+    platforms: 'Linux + partial Windows'
   },
   checks: [
     { name: 'Python syntax (cardnuke.py)', ok: true, reason: 'py_compile passed' },
@@ -123,20 +117,6 @@ app.innerHTML = `
         <div class="val" style="font-size:1rem">${data.stats.platforms}</div>
         <div class="lbl">platform support</div>
       </div>
-      <div class="stat">
-        <div class="val" style="font-size:1rem">${data.stats.localState}</div>
-        <div class="lbl">local stat (${hostLabel})</div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>🔗 Web + Program</h2>
-    <div class="link-list">
-      <a class="link-pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank">GitHub repo</a>
-      <a class="link-pill" href="./README.md" target="_blank">README</a>
-      <a class="link-pill" href="./cardnuke.py" target="_blank">cardnuke.py</a>
-      <a class="link-pill" href="./cardnuke.sh" target="_blank">cardnuke.sh</a>
     </div>
   </section>
 
@@ -155,7 +135,7 @@ app.innerHTML = `
   </section>
 
   <section>
-    <h2>🐧 Install (Linux)</h2>
+    <h2>📖 How To Install</h2>
     <div class="guide">
       <div class="guide-step">
         <div class="num">1</div>
@@ -167,7 +147,7 @@ app.innerHTML = `
       <div class="guide-step">
         <div class="num">2</div>
         <div class="body">
-          <p>Install required dependencies (Arch example)</p>
+          <p>Install required Linux dependencies (Arch example)</p>
           <pre>sudo pacman -S python dosfstools exfatprogs e2fsprogs parted util-linux testdisk smartmontools hdparm eject</pre>
         </div>
       </div>
@@ -191,41 +171,6 @@ sudo python3 cardnuke.py</pre>
         <div class="body">
           <p>Always verify your target disk before confirming <code>YES</code></p>
           <pre>lsblk -dpno NAME,SIZE,MODEL,TRAN,RM</pre>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>🪟 Install (Windows)</h2>
-    <div class="guide">
-      <div class="guide-step">
-        <div class="num">1</div>
-        <div class="body">
-          <p>Install Python 3 and Git, then clone</p>
-          <pre>git clone https://github.com/Ivoryy06/cardnuke.git %USERPROFILE%\\cardnuke</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">2</div>
-        <div class="body">
-          <p>Open PowerShell as Administrator</p>
-          <pre>cd $env:USERPROFILE\\cardnuke
-python .\\cardnuke.py</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">3</div>
-        <div class="body">
-          <p>For image backup/restore workflows, keep Win32DiskImager available if needed</p>
-          <pre># optional helper tool: Win32DiskImager</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">4</div>
-        <div class="body">
-          <p>Verify target disk carefully before confirming destructive actions</p>
-          <pre>Get-Disk | Format-Table Number,FriendlyName,Size,PartitionStyle</pre>
         </div>
       </div>
     </div>
