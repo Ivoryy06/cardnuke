@@ -59,6 +59,14 @@
     .check-row .icon { font-size: 1rem; width: 1.2rem; text-align: center; }
     .check-row .name { flex: 1; }
     .check-row .reason { font-size: 0.75rem; color: var(--muted); }
+    .split { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .mini { border: 0.5px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; }
+    .mini h3 { font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 0.6rem; }
+    .bullet-list { display: grid; gap: 6px; font-size: 0.84rem; }
+    .bullet-list div { line-height: 1.4; }
+    .link-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 0.5rem; }
+    .link-pill { border: 0.5px solid var(--border); background: var(--code-bg); color: var(--text); padding: 6px 10px; border-radius: 999px; font-size: 0.78rem; text-decoration: none; }
+    .link-pill:hover { filter: brightness(0.97); }
 
     .guide { display: flex; flex-direction: column; gap: 1rem; }
     .guide-step { display: flex; gap: 12px; }
@@ -80,13 +88,15 @@
 <script>
 const now = new Date();
 document.getElementById('gen-time').textContent = 'generated ' + now.toLocaleString();
+const localMode = location.protocol === 'file:' ? 'local' : 'hosted';
 
 const data = {
   stats: {
     scripts: 2,
     modes: 8,
     formatLevels: 4,
-    platforms: 'Linux + partial Windows'
+    platforms: 'Linux + partial Windows',
+    mode: localMode
   },
   checks: [
     { name: 'Python syntax (cardnuke.py)', ok: true, reason: 'py_compile passed' },
@@ -117,11 +127,65 @@ app.innerHTML = `
         <div class="val" style="font-size:1rem">${data.stats.platforms}</div>
         <div class="lbl">platform support</div>
       </div>
+      <div class="stat">
+        <div class="val" style="font-size:1rem">${data.stats.mode}</div>
+        <div class="lbl">local stat</div>
+      </div>
     </div>
   </section>
 
   <section>
-    <h2>🩺 Current Health</h2>
+    <h2>🔗 Connected Web + Program</h2>
+    <div class="bullet-list">
+      <div>The web dashboard documents and links directly to the executable tooling files.</div>
+      <div>Use this page for guidance, then run the same scripts locally with root/administrator privileges.</div>
+    </div>
+    <div class="link-row">
+      <a class="link-pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank">GitHub repo</a>
+      <a class="link-pill" href="./README.md" target="_blank">README</a>
+      <a class="link-pill" href="./cardnuke.py" target="_blank">cardnuke.py</a>
+      <a class="link-pill" href="./cardnuke.sh" target="_blank">cardnuke.sh</a>
+    </div>
+  </section>
+
+  <section>
+    <h2>✨ Features</h2>
+    <div class="bullet-list">
+      <div>- Multi-level wipe + format workflow (low, medium, high, override)</div>
+      <div>- File recovery path through PhotoRec with organize + dedup helpers</div>
+      <div>- Device backup and restore using raw image files</div>
+      <div>- Health checks (SMART/badblocks where available)</div>
+      <div>- Post-format write verification and speed test</div>
+      <div>- Logging per run in home directory</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>⚖️ Current Pros + Cons</h2>
+    <div class="split">
+      <div class="mini">
+        <h3>Pros</h3>
+        <div class="bullet-list">
+          <div>- End-to-end workflow in one place</div>
+          <div>- Linux path is practical and complete</div>
+          <div>- Interactive confirmations reduce accidental misuse</div>
+          <div>- Works well for repeated SD/USB maintenance tasks</div>
+        </div>
+      </div>
+      <div class="mini">
+        <h3>Cons</h3>
+        <div class="bullet-list">
+          <div>- Destructive by design if wrong disk is selected</div>
+          <div>- Some features rely on optional external tools</div>
+          <div>- Windows support is partial compared to Linux</div>
+          <div>- No GUI safeguards beyond terminal prompts</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>🩺 Current Checks</h2>
     <div class="check-list">
       ${data.checks.map(c => `
         <div class="check-row">
@@ -135,7 +199,7 @@ app.innerHTML = `
   </section>
 
   <section>
-    <h2>📖 How To Install</h2>
+    <h2>🐧 Linux Install Tutorial</h2>
     <div class="guide">
       <div class="guide-step">
         <div class="num">1</div>
@@ -171,6 +235,42 @@ sudo python3 cardnuke.py</pre>
         <div class="body">
           <p>Always verify your target disk before confirming <code>YES</code></p>
           <pre>lsblk -dpno NAME,SIZE,MODEL,TRAN,RM</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>🪟 Windows Install Tutorial</h2>
+    <div class="guide">
+      <div class="guide-step">
+        <div class="num">1</div>
+        <div class="body">
+          <p>Install Python 3 and Git for Windows</p>
+          <pre>winget install Python.Python.3
+winget install Git.Git</pre>
+        </div>
+      </div>
+      <div class="guide-step">
+        <div class="num">2</div>
+        <div class="body">
+          <p>Clone the project</p>
+          <pre>git clone https://github.com/Ivoryy06/cardnuke.git %USERPROFILE%\cardnuke</pre>
+        </div>
+      </div>
+      <div class="guide-step">
+        <div class="num">3</div>
+        <div class="body">
+          <p>Open PowerShell as Administrator and run</p>
+          <pre>cd $env:USERPROFILE\cardnuke
+python .\cardnuke.py</pre>
+        </div>
+      </div>
+      <div class="guide-step">
+        <div class="num">4</div>
+        <div class="body">
+          <p>Verify target disk before destructive confirmation</p>
+          <pre>Get-Disk | Format-Table Number,FriendlyName,Size,PartitionStyle</pre>
         </div>
       </div>
     </div>
