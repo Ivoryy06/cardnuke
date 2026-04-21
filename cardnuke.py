@@ -41,6 +41,15 @@ def powershell(script, *, check=False):
     )
 
 
+def require_success(result, action, lf):
+    if result.returncode == 0:
+        return result
+    details = ((result.stdout or "") + (result.stderr or "")).strip()
+    message = action if not details else f"{action}: {details}"
+    log(f"  {message}", lf)
+    raise RuntimeError(message)
+
+
 def root_block_name(dev):
     name = os.path.basename(dev)
     if re.match(r"^(mmcblk\d+|nvme\d+n\d+)p\d+$", name):
@@ -81,16 +90,40 @@ def windows_partition_letters(number):
     ps = (
         f"Get-Partition -DiskNumber {number} -ErrorAction SilentlyContinue | "
         "Where-Object DriveLetter | "
-        "Select-Object -ExpandProperty DriveLetter"
+        "ForEach-Object { "
+        '  "{0}|{1}|{2}" -f $_.PartitionNumber, $_.DriveLetter, $_.Size '
+        "}"
     )
     r = powershell(ps)
-    return [line.strip().upper() for line in r.stdout.splitlines() if line.strip()]
+    entries = []
+    for line in r.stdout.splitlines():
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) != 3 or not parts[1]:
+            continue
+        entries.append(
+            {
+                "partition": int(parts[0]),
+                "letter": parts[1].upper(),
+                "size": int(parts[2]) if parts[2].isdigit() else 0,
+            }
+        )
+    return entries
 
 
-def windows_primary_volume(number, lf=None):
-    letters = windows_partition_letters(number)
-    if letters:
-        return letters[0] + ":"
+def choose_windows_volume(number, lf=None, purpose="use"):
+    entries = windows_partition_letters(number)
+    if len(entries) == 1:
+        return entries[0]["letter"] + ":"
+    if len(entries) > 1:
+        log(f"  Multiple mounted volumes detected for disk {number}.", lf)
+        for idx, entry in enumerate(entries, start=1):
+            size_gb = entry["size"] / 1024**3 if entry["size"] else 0
+            print(f"  [{idx}] Partition {entry['partition']}  {entry['letter']}:  {size_gb:.2f} GB")
+        choice = input(f"Choose volume to {purpose} [1-{len(entries)}] (default 1): ").strip() or "1"
+        if choice.isdigit() and 1 <= int(choice) <= len(entries):
+            return entries[int(choice) - 1]["letter"] + ":"
+        log("  Invalid volume selection.", lf)
+        return None
     log("  No mounted volume letter found.", lf)
     return None
 
@@ -101,12 +134,50 @@ def windows_prepare_disk(number, lf):
     Set-Disk -Number {number} -IsReadOnly $false -ErrorAction SilentlyContinue
     Update-HostStorageCache
     """
-    powershell(script)
+    require_success(powershell(script), f"Unable to prepare disk {number}", lf)
     log(f"  Disk {number} is online and writable.", lf)
 
 
 def windows_refresh_storage():
     powershell("Update-HostStorageCache")
+
+
+def windows_set_disk_offline(number, offline, lf):
+    state = "$true" if offline else "$false"
+    label = "offline" if offline else "online"
+    script = f"""
+    Set-Disk -Number {number} -IsReadOnly $false -ErrorAction SilentlyContinue
+    Set-Disk -Number {number} -IsOffline {state} -ErrorAction Stop
+    Update-HostStorageCache
+    """
+    require_success(powershell(script), f"Unable to set disk {number} {label}", lf)
+    log(f"  Disk {number} set {label}.", lf)
+
+
+def windows_dismount_volumes(number, lf):
+    script = f"""
+    $letters = Get-Partition -DiskNumber {number} -ErrorAction SilentlyContinue |
+      Where-Object DriveLetter |
+      Select-Object -ExpandProperty DriveLetter
+    foreach ($letter in $letters) {{
+      mountvol "$($letter):" /p
+    }}
+    """
+    require_success(powershell(script), f"Unable to dismount volumes on disk {number}", lf)
+    log("  Requested volume dismount.", lf)
+
+
+def windows_with_raw_disk(number, lf, action):
+    windows_prepare_disk(number, lf)
+    windows_dismount_volumes(number, lf)
+    windows_set_disk_offline(number, True, lf)
+    try:
+        return action()
+    finally:
+        try:
+            windows_set_disk_offline(number, False, lf)
+        except RuntimeError:
+            log(f"  Warning: disk {number} may still be offline; bring it online manually if needed.", lf)
 
 
 def stream_sha256(path):
@@ -289,11 +360,11 @@ def clear_ro(dev, lf):
     if WIN:
         number = normalize_windows_disk(dev)["number"]
         windows_prepare_disk(number, lf)
-        diskpart(f"""
+        require_success(diskpart(f"""
         select disk {number}
         attributes disk clear readonly
         online disk noerr
-        """)
+        """), f"Unable to clear readonly flag on disk {number}", lf)
         log("  diskpart: readonly cleared", lf)
     else:
         run(["blockdev", "--setrw", dev])
@@ -311,7 +382,7 @@ def health_check(dev, lf):
     log("→ Running health / bad block check...", lf)
     if WIN:
         number = normalize_windows_disk(dev)["number"]
-        volume = windows_primary_volume(number, lf)
+        volume = choose_windows_volume(number, lf, purpose="scan")
         if volume:
             r = run(["chkdsk", volume, "/scan"])
             text = (r.stdout or "") + (r.stderr or "")
@@ -340,10 +411,9 @@ def backup(dev, lf):
     log(f"→ Backing up {dev} to {out}...", lf)
     if WIN:
         info = normalize_windows_disk(dev)
-        windows_prepare_disk(info["number"], lf)
-        copy_device_to_file_windows(info["path"], out, lf)
+        windows_with_raw_disk(info["number"], lf, lambda: copy_device_to_file_windows(info["path"], out, lf))
     else:
-        subprocess.run(["dd", f"if={dev}", f"of={out}", "bs=4M", "status=progress", "conv=fsync"])
+        subprocess.run(["dd", f"if={dev}", f"of={out}", "bs=4M", "status=progress", "conv=fsync"], check=True)
     digest = stream_sha256(out)
     with open(out + ".sha256", "w", encoding="utf-8") as f:
         f.write(digest + "\n")
@@ -354,17 +424,45 @@ def dd_fill(dev, source, label, lf):
     log(f"→ {label}...", lf)
     if WIN:
         info = normalize_windows_disk(dev)
-        windows_prepare_disk(info["number"], lf)
-        total = physical_drive_size(info["path"])
-        if source == "random":
-            write_pattern_windows(info["path"], os.urandom, total, lf)
-        else:
-            zero_block = b"\x00" * CHUNK_SIZE
-            write_pattern_windows(info["path"], lambda size: zero_block[:size], total, lf)
+        def do_write():
+            total = physical_drive_size(info["path"])
+            if source == "random":
+                write_pattern_windows(info["path"], os.urandom, total, lf)
+            else:
+                zero_block = b"\x00" * CHUNK_SIZE
+                write_pattern_windows(info["path"], lambda size: zero_block[:size], total, lf)
+        windows_with_raw_disk(info["number"], lf, do_write)
         windows_refresh_storage()
         return
     src = "/dev/urandom" if source == "random" else "/dev/zero"
-    subprocess.run(["dd", f"if={src}", f"of={dev}", "bs=4M", "status=progress", "conv=fsync"])
+    subprocess.run(["dd", f"if={src}", f"of={dev}", "bs=4M", "status=progress", "conv=fsync"], check=True)
+
+
+def wait_for_linux_partition(dev, part, attempts=10, delay=1.0):
+    for _ in range(attempts):
+        if os.path.exists(part):
+            return
+        subprocess.run(["partprobe", dev], capture_output=True)
+        time.sleep(delay)
+    raise RuntimeError(f"Partition device did not appear: {part}")
+
+
+def ensure_windows_format_supported(number, fs, lf):
+    if fs != "fat32":
+        return
+    result = require_success(
+        powershell(f"(Get-Disk -Number {number} -ErrorAction Stop).Size"),
+        f"Unable to read disk size for {number}",
+        lf,
+    )
+    try:
+        size_bytes = int(result.stdout.strip())
+    except ValueError as e:
+        raise RuntimeError(f"Unable to parse disk size for {number}") from e
+    if size_bytes > 32 * 1024**3:
+        raise RuntimeError(
+            "Windows native FAT32 formatting is limited to disks up to 32 GB; use exfat/ntfs or format FAT32 on Linux"
+        )
 
 
 def do_format(dev, fs, label, lf):
@@ -375,8 +473,9 @@ def do_format(dev, fs, label, lf):
             log("  Windows native mode supports fat32, exfat, and ntfs only.", lf)
             return False
         windows_prepare_disk(info["number"], lf)
+        ensure_windows_format_supported(info["number"], fs, lf)
         label_arg = f'label="{label}"' if label else ""
-        diskpart(f"""
+        require_success(diskpart(f"""
         select disk {info["number"]}
         online disk noerr
         attributes disk clear readonly noerr
@@ -385,13 +484,15 @@ def do_format(dev, fs, label, lf):
         create partition primary
         format fs={fs} {label_arg} quick
         assign
-        """)
+        """), f"diskpart format failed for disk {info['number']}", lf)
         windows_refresh_storage()
         return True
 
     part = linux_partition_path(dev)
-    subprocess.run(["parted", "-s", dev, "mklabel", "msdos"])
-    subprocess.run(["parted", "-s", dev, "mkpart", "primary", "1MiB", "100%"])
+    subprocess.run(["parted", "-s", dev, "mklabel", "msdos"], check=True)
+    subprocess.run(["parted", "-s", dev, "mkpart", "primary", "1MiB", "100%"], check=True)
+    subprocess.run(["partprobe", dev], capture_output=True)
+    wait_for_linux_partition(dev, part)
     if fs == "fat32":
         cmd = ["mkfs.vfat", "-F", "32"]
         if label:
@@ -405,7 +506,7 @@ def do_format(dev, fs, label, lf):
         if label:
             cmd += ["-L", label]
     cmd.append(part)
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
     return True
 
 
@@ -413,7 +514,7 @@ def verify_write(dev, lf):
     log("→ Verifying write integrity...", lf)
     if WIN:
         info = normalize_windows_disk(dev)
-        volume = windows_primary_volume(info["number"], lf)
+        volume = choose_windows_volume(info["number"], lf, purpose="verify")
         if not volume:
             return
         tf = os.path.join(volume + "\\", ".cardnuke_test")
@@ -453,7 +554,7 @@ def speed_test(dev, lf):
     log("→ Speed test...", lf)
     if WIN:
         info = normalize_windows_disk(dev)
-        volume = windows_primary_volume(info["number"], lf)
+        volume = choose_windows_volume(info["number"], lf, purpose="benchmark")
         if not volume:
             return
         tf = os.path.join(volume + "\\", ".speed_test")
@@ -531,7 +632,7 @@ def repair(dev, lf):
     log(f"→ Repairing filesystem on {dev}...", lf)
     if WIN:
         info = normalize_windows_disk(dev)
-        volume = windows_primary_volume(info["number"], lf)
+        volume = choose_windows_volume(info["number"], lf, purpose="repair")
         if not volume:
             log("  No mounted volume found to repair.", lf)
             return
@@ -572,17 +673,16 @@ def restore(dev, lf):
     log(f"→ Restoring {img} → {dev}...", lf)
     if WIN:
         info = normalize_windows_disk(dev)
-        windows_prepare_disk(info["number"], lf)
-        copy_file_to_device_windows(img, info["path"], lf)
+        windows_with_raw_disk(info["number"], lf, lambda: copy_file_to_device_windows(img, info["path"], lf))
         windows_refresh_storage()
         sha_file = img + ".sha256"
         if os.path.isfile(sha_file):
             log("→ Verifying restore checksum...", lf)
-            verify_image_against_device_windows(img, info["path"], lf)
+            windows_with_raw_disk(info["number"], lf, lambda: verify_image_against_device_windows(img, info["path"], lf))
         log("  ✓ Restore complete.", lf)
         return
 
-    subprocess.run(["dd", f"if={img}", f"of={dev}", "bs=4M", "status=progress", "conv=fsync"])
+    subprocess.run(["dd", f"if={img}", f"of={dev}", "bs=4M", "status=progress", "conv=fsync"], check=True)
     sha_file = img + ".sha256"
     if os.path.isfile(sha_file):
         expected = open(sha_file, encoding="utf-8").read().strip()
@@ -799,72 +899,76 @@ def main():
     mode = input("Choose [1-8] (default 1): ").strip() or "1"
     log(f"Mode: {mode}", lf)
 
-    if mode == "2":
-        do_recover(dev, lf)
-        eject(dev, lf)
-        return
-    if mode == "3":
-        health_check(dev, lf)
-        return
-    if mode == "4":
-        backup(dev, lf)
-        return
-    if mode == "5":
-        speed_test(dev, lf)
-        return
-    if mode == "6":
-        card_info(dev, lf)
-        return
-    if mode == "7":
-        repair(dev, lf)
-        return
-    if mode == "8":
-        restore(dev, lf)
-        eject(dev, lf)
-        return
-
-    if input("\nRun health check before format? [y/N]: ").strip().lower() == "y":
-        health_check(dev, lf)
-    if input("Backup card before format? [y/N]: ").strip().lower() == "y":
-        backup(dev, lf)
-
-    confirm = input(f"\nDESTROY all data on {dev}? Type YES: ")
-    if confirm != "YES":
-        log("Aborted.", lf)
-        return
-
-    print("\nFormat level:")
-    print("  [1] low      - reformat only")
-    print("  [2] medium   - zero fill + reformat")
-    print("  [3] high     - 3x random + zero fill + reformat")
-    print("  [4] override - clear RO + high + reformat")
-    level = input("Choose [1-4] (default 2): ").strip() or "2"
-    if WIN:
-        fs = ask_windows_filesystem(lf)
-        if not fs:
+    try:
+        if mode == "2":
+            do_recover(dev, lf)
+            eject(dev, lf)
             return
-    else:
-        fs = input("Filesystem [fat32/exfat/ext4] (default fat32): ").strip().lower() or "fat32"
-    label = input("Volume label (optional, e.g. GOPRO): ").strip()
-    log(f"Level: {level}, FS: {fs}, Label: {label or '(none)'}", lf)
+        if mode == "3":
+            health_check(dev, lf)
+            return
+        if mode == "4":
+            backup(dev, lf)
+            return
+        if mode == "5":
+            speed_test(dev, lf)
+            return
+        if mode == "6":
+            card_info(dev, lf)
+            return
+        if mode == "7":
+            repair(dev, lf)
+            return
+        if mode == "8":
+            restore(dev, lf)
+            eject(dev, lf)
+            return
 
-    if level == "4":
-        clear_ro(dev, lf)
-    if level in ("2", "3", "4"):
-        if level in ("3", "4"):
-            for i in range(1, 4):
-                dd_fill(dev, "random", f"Random pass {i}/3", lf)
-        dd_fill(dev, "zero", "Zero fill", lf)
+        if input("\nRun health check before format? [y/N]: ").strip().lower() == "y":
+            health_check(dev, lf)
+        if input("Backup card before format? [y/N]: ").strip().lower() == "y":
+            backup(dev, lf)
 
-    if not do_format(dev, fs, label, lf):
-        return
-    verify_write(dev, lf)
-    speed_test(dev, lf)
+        confirm = input(f"\nDESTROY all data on {dev}? Type YES: ")
+        if confirm != "YES":
+            log("Aborted.", lf)
+            return
 
-    log(f"✓ Done. {dev} formatted as {fs}.", lf)
-    print(f"\nLog saved to: {lf}")
-    notify(f"cardnuke done: {dev} formatted as {fs}")
-    eject(dev, lf)
+        print("\nFormat level:")
+        print("  [1] low      - reformat only")
+        print("  [2] medium   - zero fill + reformat")
+        print("  [3] high     - 3x random + zero fill + reformat")
+        print("  [4] override - clear RO + high + reformat")
+        level = input("Choose [1-4] (default 2): ").strip() or "2"
+        if WIN:
+            fs = ask_windows_filesystem(lf)
+            if not fs:
+                return
+        else:
+            fs = input("Filesystem [fat32/exfat/ext4] (default fat32): ").strip().lower() or "fat32"
+        label = input("Volume label (optional, e.g. GOPRO): ").strip()
+        log(f"Level: {level}, FS: {fs}, Label: {label or '(none)'}", lf)
+
+        if level == "4":
+            clear_ro(dev, lf)
+        if level in ("2", "3", "4"):
+            if level in ("3", "4"):
+                for i in range(1, 4):
+                    dd_fill(dev, "random", f"Random pass {i}/3", lf)
+            dd_fill(dev, "zero", "Zero fill", lf)
+
+        if not do_format(dev, fs, label, lf):
+            return
+        verify_write(dev, lf)
+        speed_test(dev, lf)
+
+        log(f"✓ Done. {dev} formatted as {fs}.", lf)
+        print(f"\nLog saved to: {lf}")
+        notify(f"cardnuke done: {dev} formatted as {fs}")
+        eject(dev, lf)
+    except (RuntimeError, subprocess.CalledProcessError, OSError) as e:
+        log(f"ERROR: {e}", lf)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

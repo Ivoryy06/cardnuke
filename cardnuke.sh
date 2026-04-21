@@ -51,6 +51,12 @@ do_format() {
   echo "→ Writing new partition table..."
   parted -s "$DEV" mklabel msdos
   parted -s "$DEV" mkpart primary 1MiB 100%
+  partprobe "$DEV" || true
+  for _ in {1..10}; do
+    [[ -b "$PART" ]] && break
+    sleep 1
+  done
+  [[ -b "$PART" ]] || { echo "Partition device did not appear: $PART"; exit 1; }
   echo "→ Formatting $PART as $FS..."
   case "$FS" in
     fat32)  mkfs.vfat -F 32 "$PART" ;;
@@ -67,26 +73,26 @@ case "$LEVEL" in
     ;;
   2)
     echo "→ Zero fill..."
-    dd if=/dev/zero of="$DEV" bs=4M status=progress conv=fsync 2>&1 || true
+    dd if=/dev/zero of="$DEV" bs=4M status=progress conv=fsync
     do_format
     ;;
   3)
     for i in 1 2 3; do
       echo "→ Random pass $i/3..."
-      dd if=/dev/urandom of="$DEV" bs=4M status=progress conv=fsync 2>&1 || true
+      dd if=/dev/urandom of="$DEV" bs=4M status=progress conv=fsync
     done
     echo "→ Zero fill..."
-    dd if=/dev/zero of="$DEV" bs=4M status=progress conv=fsync 2>&1 || true
+    dd if=/dev/zero of="$DEV" bs=4M status=progress conv=fsync
     do_format
     ;;
   4)
     clear_ro
     for i in 1 2 3; do
       echo "→ Random pass $i/3..."
-      dd if=/dev/urandom of="$DEV" bs=4M status=progress conv=fsync 2>&1 || true
+      dd if=/dev/urandom of="$DEV" bs=4M status=progress conv=fsync
     done
     echo "→ Zero fill..."
-    dd if=/dev/zero of="$DEV" bs=4M status=progress conv=fsync 2>&1 || true
+    dd if=/dev/zero of="$DEV" bs=4M status=progress conv=fsync
     do_format
     ;;
   *)
