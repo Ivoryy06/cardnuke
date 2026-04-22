@@ -553,50 +553,35 @@ def verify_write(dev, lf):
 def speed_test(dev, lf):
     log("→ Speed test...", lf)
     if WIN:
-        info = normalize_windows_disk(dev)
-        volume = choose_windows_volume(info["number"], lf, purpose="benchmark")
-        if not volume:
-            return
-        tf = os.path.join(volume + "\\", ".speed_test")
-        size = 64 * 1024 * 1024
-        data = os.urandom(size)
-        try:
-            t = time.time()
-            with open(tf, "wb") as f:
-                f.write(data)
-                f.flush()
-                os.fsync(f.fileno())
-            write_speed = size / (time.time() - t) / 1024 / 1024
-            t = time.time()
-            with open(tf, "rb") as f:
-                f.read()
-            read_speed = size / (time.time() - t) / 1024 / 1024
-            os.remove(tf)
-            log(f"  Write: {write_speed:.1f} MB/s  Read: {read_speed:.1f} MB/s", lf)
-        except Exception as e:
-            log(f"  Speed test error: {e}", lf)
+        log("  Speed test not supported on Windows yet", lf)
         return
 
-    part = linux_partition_path(dev)
     mnt = "/tmp/cardnuke_speed"
     os.makedirs(mnt, exist_ok=True)
+
+    if os.path.ismount(mnt):
+        subprocess.run(["umount", mnt], capture_output=True)
+
     try:
-        subprocess.run(["mount", part, mnt], check=True)
-        size = 64 * 1024 * 1024
-        data = os.urandom(size)
-        tf = os.path.join(mnt, ".speed_test")
-        t = time.time()
-        with open(tf, "wb") as f:
-            f.write(data)
-            f.flush()
-            os.fsync(f.fileno())
-        write_speed = size / (time.time() - t) / 1024 / 1024
-        t = time.time()
-        with open(tf, "rb") as f:
-            f.read()
-        read_speed = size / (time.time() - t) / 1024 / 1024
-        os.remove(tf)
-        log(f"  Write: {write_speed:.1f} MB/s  Read: {read_speed:.1f} MB/s", lf)
+        dev_path = linux_partition_path(dev)
+        if not os.path.exists(dev_path):
+            dev_path = dev
+        r = subprocess.run(["mount", "-o", "sync", dev_path, mnt], capture_output=True)
+        if r.returncode != 0:
+            log(f"  Mount error: {r.stderr.decode()}", lf)
+            return
+
+        binpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "speed_test")
+        r = subprocess.run([binpath, mnt, "both"], capture_output=True, text=True)
+        if r.returncode != 0:
+            log(f"  Error: {r.stderr}", lf)
+            return
+        if r.stderr:
+            for line in r.stderr.strip().split("\n"):
+                log(f"  {line}", lf)
+        parts = r.stdout.strip().split()
+        if len(parts) == 2:
+            log(f"  Write: {parts[0]} MB/s  Read: {parts[1]} MB/s", lf)
     except Exception as e:
         log(f"  Speed test error: {e}", lf)
     finally:

@@ -93,17 +93,17 @@ const localMode = location.protocol === 'file:' ? 'local' : 'hosted';
 
 const data = {
   stats: {
-    scripts: 2,
-    modes: 8,
+    scripts: 1,
+    modes: 9,
     formatLevels: 4,
-    platforms: 'Linux + Windows',
+    platforms: 'Linux (+ Windows)',
     mode: localMode
   },
   checks: [
-    { name: 'Python syntax (cardnuke.py)', ok: true, reason: 'py_compile passed' },
-    { name: 'Bash syntax (cardnuke.sh)', ok: true, reason: 'bash -n passed' },
-    { name: 'Repo hygiene', ok: true, reason: '.gitignore added, pycache removed' },
-    { name: 'Risk profile', ok: false, reason: 'Destructive by design; verify device path first' }
+    { name: 'C++ build (cardnuke)', ok: true, reason: 'g++ compiled successfully' },
+    { name: 'Speed test binary', ok: true, reason: 'O_DIRECT + fsync' },
+    { name: 'Repo hygiene', ok: true, reason: 'Python deprecated' },
+    { name: 'Risk profile', ok: false, reason: 'Destructive by design; verify device first' }
   ]
 };
 
@@ -118,7 +118,7 @@ app.innerHTML = `
       </div>
       <div class="stat">
         <div class="val">${data.stats.modes}</div>
-        <div class="lbl">main python modes</div>
+        <div class="lbl">main modes</div>
       </div>
       <div class="stat">
         <div class="val">${data.stats.formatLevels}</div>
@@ -144,42 +144,49 @@ app.innerHTML = `
     <div class="link-row">
       <a class="link-pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank">GitHub repo</a>
       <a class="link-pill" href="./README.md" target="_blank">README</a>
-      <a class="link-pill" href="./cardnuke.py" target="_blank">cardnuke.py</a>
-      <a class="link-pill" href="./cardnuke.sh" target="_blank">cardnuke.sh</a>
+      <a class="link-pill" href="./cardnuke" target="_blank">cardnuke (C++)</a>
     </div>
   </section>
 
   <section>
-    <h2>✨ Features</h2>
+    <h2>⚡ C++ Implementation</h2>
     <div class="bullet-list">
-      <div>- Multi-level wipe + format workflow (low, medium, high, override)</div>
-      <div>- File recovery path through PhotoRec with organize + dedup helpers</div>
-      <div>- Device backup and restore using raw image files</div>
-      <div>- Health checks (SMART/badblocks where available)</div>
-      <div>- Post-format write verification and speed test</div>
-      <div>- Logging per run in home directory</div>
+      <div>- Written in C++ for maximum performance</div>
+      <div>- Speed test uses O_DIRECT for true hardware speeds</div>
+      <div>- 8MB sequential writes for SD card page alignment</div>
+      <div>- fsync for hardware synchronization</div>
+      <div>- Cache dropping via /proc/sys/vm/drop_caches</div>
+      <div>- Monotonic clock for accurate timing</div>
     </div>
   </section>
 
   <section>
-    <h2>⚖️ Current Pros + Cons</h2>
+    <h2>🔧 Mode Status</h2>
+    <div class="bullet-list">
+      <div><b>Stable:</b> format, recover, health, info, eject</div>
+      <div><b>Beta:</b> backup, restore, repair, speed</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>⚖️ Pros + Cons</h2>
     <div class="split">
       <div class="mini">
         <h3>Pros</h3>
         <div class="bullet-list">
-          <div>- End-to-end workflow in one place</div>
-          <div>- Linux and Windows both have terminal-native flows</div>
-          <div>- Interactive confirmations reduce accidental misuse</div>
-          <div>- Works well for repeated SD/USB maintenance tasks</div>
+          <div>- Written in C++ for maximum performance</div>
+          <div>- True hardware speed measurement</div>
+          <div>- Interactive mode with confirmations</div>
+          <div>- Works for repeated SD/USB maintenance</div>
         </div>
       </div>
       <div class="mini">
         <h3>Cons</h3>
         <div class="bullet-list">
-          <div>- Destructive by design if wrong disk is selected</div>
-          <div>- Some features rely on optional external tools</div>
-          <div>- Windows native mode is limited to fat32/exfat/ntfs</div>
-          <div>- No GUI safeguards beyond terminal prompts</div>
+          <div>- Destructive if wrong disk selected</div>
+          <div>- Some features use external tools</div>
+          <div>- Windows build requires MinGW</div>
+          <div>- Always verify device first</div>
         </div>
       </div>
     </div>
@@ -200,7 +207,7 @@ app.innerHTML = `
   </section>
 
   <section>
-    <h2>🐧 Linux Install Tutorial</h2>
+    <h2>🐧 Linux Install</h2>
     <div class="guide">
       <div class="guide-step">
         <div class="num">1</div>
@@ -212,75 +219,58 @@ app.innerHTML = `
       <div class="guide-step">
         <div class="num">2</div>
         <div class="body">
-          <p>Install required Linux dependencies (Arch example)</p>
-          <pre>sudo pacman -S python dosfstools exfatprogs e2fsprogs parted util-linux testdisk smartmontools hdparm eject</pre>
+          <p>Install dependencies</p>
+          <pre>sudo pacman -S gcc dosfstools exfatprogs e2fsprogs parted util-linux testdisk eject</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">3</div>
         <div class="body">
-          <p>Run the interactive tool as root</p>
+          <p>Build the C++ binary</p>
           <pre>cd ~/cardnuke
-sudo python3 cardnuke.py</pre>
+make</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">4</div>
         <div class="body">
-          <p>Optional quick shell mode</p>
-          <pre>sudo bash ~/cardnuke/cardnuke.sh /dev/sdX</pre>
+          <p>Run as root</p>
+          <pre>cd ~/cardnuke
+sudo ./cardnuke</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">5</div>
         <div class="body">
-          <p>Always verify your target disk before confirming <code>YES</code></p>
-          <pre>lsblk -dpno NAME,SIZE,MODEL,TRAN,RM</pre>
+          <p>Or use command-line mode</p>
+          <pre>sudo ./cardnuke /dev/sdb 5    # speed test</pre>
         </div>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>🪟 Windows Install Tutorial</h2>
+    <h2>🪟 Windows Build</h2>
     <div class="guide">
       <div class="guide-step">
         <div class="num">1</div>
         <div class="body">
-          <p>Install Python 3 and Git for Windows</p>
-          <pre>winget install Python.Python.3
-winget install Git.Git</pre>
+          <p>Install MinGW-w64 or use MSYS2</p>
+          <pre>pacman -S mingw-w64-x86_64-gcc</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">2</div>
         <div class="body">
-          <p>Clone the project</p>
-          <pre>git clone https://github.com/Ivoryy06/cardnuke.git %USERPROFILE%\cardnuke</pre>
+          <p>Compile</p>
+          <pre>g++ -O2 -std=c++17 -o cardnuke.exe cardnuke.cpp</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">3</div>
         <div class="body">
-          <p>Open PowerShell as Administrator and run</p>
-          <pre>cd $env:USERPROFILE\cardnuke
-python .\cardnuke.py</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">4</div>
-        <div class="body">
-          <p>Pass a disk number directly when needed</p>
-          <pre>python .\cardnuke.py 2
-python .\cardnuke.py \\.\PhysicalDrive2</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">5</div>
-        <div class="body">
-          <p>Verify target disk before destructive confirmation</p>
-          <pre>Get-Disk | Format-Table Number,FriendlyName,Size,PartitionStyle</pre>
-          <div class="note">Windows native formatting supports <code>fat32</code>, <code>exfat</code>, and <code>ntfs</code>. Use Linux for <code>ext4</code>.</div>
+          <p>Run as Administrator</p>
+          <pre>.\cardnuke.exe</pre>
         </div>
       </div>
     </div>
