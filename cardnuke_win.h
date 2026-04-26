@@ -20,6 +20,8 @@ BOOL write_sectors(HANDLE h, uint64_t start, const void* buf, size_t count);
 uint64_t get_device_size(HANDLE h);
 BOOL list_drives_windows();
 std::string get_drive_label(char letter);
+BOOL is_admin();
+int ask_yes_no(const char* prompt);
 
 #ifdef __cplusplus
 }

@@ -15,6 +15,20 @@ using namespace std;
 
 static const size_t SECTOR_SIZE = 512;
 
+int ask_yes_no(const char* prompt) {
+    cout << prompt << " [y/N]: ";
+    string r;
+    getline(cin, r);
+    return (r == "y" || r == "Y" || r == "yes");
+}
+
+string ask_choice(const char* prompt, const char* def) {
+    cout << prompt << " (default " << def << "): ";
+    string r;
+    getline(cin, r);
+    return r.empty() ? def : r;
+}
+
 string timestamp() {
     auto now = chrono::system_clock::now();
     time_t t = chrono::system_clock::to_time_t(now);
@@ -180,6 +194,12 @@ bool is_admin() {
 void format_drive(const string& drive, const string& fs, const string& label) {
     log("Formatting " + drive + ": with " + fs + "...");
 
+    cout << "\n⚠️  WARNING: This will ERASE ALL DATA on drive " << drive << ":!\n";
+    if (!ask_yes_no("Are you sure you want to continue?")) {
+        log("Cancelled.");
+        return;
+    }
+
     string volPath = "\\\\.\\" + drive;
     HANDLE h = CreateFileA(volPath.c_str(), GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
@@ -203,6 +223,12 @@ void format_drive(const string& drive, const string& fs, const string& label) {
 
 void backup_drive(const string& drive, const string& outfile) {
     log("Backing up " + drive + ": to " + outfile + "...");
+
+    cout << "\nThis will backup drive " << drive << ": to " << outfile << "\n";
+    if (!ask_yes_no("Continue?")) {
+        log("Cancelled.");
+        return;
+    }
 
     string volPath = "\\\\.\\" + drive;
     HANDLE h = open_device(volPath.c_str(), FALSE);
@@ -258,6 +284,13 @@ void backup_drive(const string& drive, const string& outfile) {
 
 void restore_drive(const string& infile, const string& drive) {
     log("Restoring " + infile + " to " + drive + ":...");
+
+    cout << "\n⚠️  WARNING: This will ERASE ALL DATA on drive " << drive << ":!\n";
+    cout << "Restoring from: " << infile << "\n";
+    if (!ask_yes_no("Are you sure you want to continue?")) {
+        log("Cancelled.");
+        return;
+    }
 
     FILE* in = fopen(infile.c_str(), "rb");
     if (!in) {
@@ -387,16 +420,63 @@ void print_usage(const char* prog) {
     cout << "  5 info    - show drive info\n";
     cout << "  6 eject   - safely remove drive\n";
     cout << "\nExamples:\n";
-    cout << "  " << prog << " D 1        # format drive D:\n";
-    cout << "  " << prog << " D 2 backup.img  # backup to file\n";
-    cout << "  " << prog << " 0 4          # speed test PhysicalDrive0\n";
+    cout << "  " << prog << " D 1             # format drive D:\n";
+    cout << "  " << prog << " D 1 exfat mycard  # format D: as exFAT with label\n";
+    cout << "  " << prog << " D 2 backup.img   # backup D: to file\n";
+    cout << "  " << prog << " D 4             # speed test D:\n";
+    cout << "  " << prog << " 0 4              # speed test PhysicalDrive0\n";
+}
+
+void print_menu() {
+    cout << "\n=== cardnuke (Windows) ===\n\n";
+    cout << "Choose an action:\n";
+    cout << "  [1] Format    - Wipe and reformat drive\n";
+    cout << "  [2] Backup    - Backup drive to .img file\n";
+    cout << "  [3] Restore  - Restore .img file to drive\n";
+    cout << "  [4] Speed    - Benchmark read/write speed\n";
+    cout << "  [5] Info     - Show drive information\n";
+    cout << "  [6] Eject   - Safely remove drive\n";
+    cout << "  [Q] Quit    - Exit\n";
 }
 
 int main(int argc, char* argv[]) {
     cout << "=== cardnuke (Windows) ===\n";
 
     if (!is_admin()) {
-        cout << "Warning: Run as Administrator for full functionality\n";
+        cout << "⚠️  Warning: Run as Administrator for full functionality\n\n";
+    }
+
+    if (argc < 2) {
+        list_drives_windows();
+        print_menu();
+        
+        string drive, mode;
+        cout << "\nEnter drive letter (e.g., D): ";
+        getline(cin, drive);
+        if (drive.empty() || drive == "q" || drive == "Q") return 0;
+        
+        cout << "Choose mode (1-6): ";
+        getline(cin, mode);
+        
+        if (mode == "1" || mode == "format" || mode == "Format") {
+            string fs = ask_choice("Filesystem (NTFS/FAT32/exFAT)", "NTFS");
+            string label = ask_choice("Volume label", "CARD");
+            format_drive(drive, fs, label);
+        } else if (mode == "2" || mode == "backup" || mode == "Backup") {
+            string outfile = ask_choice("Backup filename", "backup.img");
+            backup_drive(drive, outfile);
+        } else if (mode == "3" || mode == "restore" || mode == "Restore") {
+            string infile = ask_choice("Image filename", "backup.img");
+            restore_drive(infile, drive);
+        } else if (mode == "4" || mode == "speed" || mode == "Speed") {
+            speed_test_drive(drive);
+        } else if (mode == "5" || mode == "info" || mode == "Info") {
+            list_drives_windows();
+        } else if (mode == "6" || mode == "eject" || mode == "Eject") {
+            eject_drive(drive);
+        }
+        
+        return 0;
     }
 
     if (argc < 3) {

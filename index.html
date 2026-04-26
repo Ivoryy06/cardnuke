@@ -74,8 +74,9 @@
     .guide-step .body { flex: 1; }
     .guide-step .body p { font-size: 0.85rem; margin-bottom: 4px; }
     .note { font-size: 0.8rem; color: var(--muted); line-height: 1.4; margin-top: 0.5rem; }
+    .note a { color: var(--accent); text-decoration: underline; }
     pre { background: var(--code-bg); border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 0.78rem; overflow-x: auto; color: var(--text); font-family: monospace; }
-    code { font-family: monospace; }
+    code { font-family: monospace; background: var(--code-bg); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
   </style>
 </head>
 <body>
@@ -142,10 +143,11 @@ app.innerHTML = `
       <div>Use this page for guidance, then run the same terminal workflow locally with root (Linux) or Administrator (Windows) privileges.</div>
     </div>
     <div class="link-row">
-      <a class="link-pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank">GitHub repo</a>
+      <a class="link-pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank">GitHub</a>
       <a class="link-pill" href="./README.md" target="_blank">README</a>
       <a class="link-pill" href="./cardnuke" target="_blank">cardnuke (Linux)</a>
-      <a class="link-pill" href="./cardnuke_win.cpp" target="_blank">cardnuke_win.cpp (Windows)</a>
+      <a class="link-pill" href="./cardnuke_win.cpp" target="_blank">cardnuke_win (Windows)</a>
+      <a class="link-pill" href="#contact">Contact</a>
     </div>
   </section>
 
@@ -274,43 +276,74 @@ sudo ./cardnuke</pre>
   </section>
 
   <section>
-    <h2>🪟 Windows Install</h2>
+    <h2>🪟 Windows Tutorial</h2>
     <div class="guide">
       <div class="guide-step">
         <div class="num">1</div>
         <div class="body">
-          <p>Install MinGW-w64 (if not already)</p>
-          <pre>pacman -S mingw-w64-x86_64-gcc</pre>
+          <p>Download the source file</p>
+          <p class="note">Get <code>cardnuke_win.cpp</code> from the repository (or copy it from the folder if you have it)</p>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">2</div>
         <div class="body">
-          <p>Compile the Windows binary</p>
-          <pre>cd cardnuke
-g++ -O2 -Wall -std=c++17 -o cardnuke_win.exe cardnuke_win.cpp -lws2_32 -lsetupapi</pre>
+          <p>Install MinGW-w64 compiler</p>
+          <p class="note">Download MSYS2 from <a href="https://www.msys2.org" target="_blank" style="color: var(--accent)">msys2.org</a>, then run in MSYS2 terminal:</p>
+          <pre>pacman -S mingw-w64-x86_64-gcc</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">3</div>
         <div class="body">
-          <p>Open Command Prompt as Administrator</p>
-          <pre>Press Win+X → Terminal (Admin)</pre>
+          <p>Compile the program</p>
+          <p class="note">Open "MinGW Win64" from your Start Menu (or use MSYS2 terminal), then:</p>
+          <pre>g++ -O2 -Wall -std=c++17 -o cardnuke_win.exe cardnuke_win.cpp -lws2_32 -lsetupapi</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">4</div>
         <div class="body">
-          <p>Run from CMD</p>
-          <pre>cardnuke_win.exe --list         # list drives
-cardnuke_win.exe D 1           # format D:
-cardnuke_win.exe D 2 backup.img # backup to file
-cardnuke_win.exe D 4           # speed test</pre>
+          <p>Run as Administrator</p>
+          <p class="note">Right-click Command Prompt → Run as Administrator, or press <code>Win+X</code> → Terminal (Admin)</p>
+        </div>
+      </div>
+      <div class="guide-step">
+        <div class="num">5</div>
+        <div class="body">
+          <p>Use the program</p>
+          <p class="note">Navigate to where you saved <code>cardnuke_win.exe</code> and run:</p>
+          <pre>cd Downloads\cardnuke
+
+cardnuke_win.exe --list           List all drives
+cardnuke_win.exe D 1             Format drive D: (NTFS)
+cardnuke_win.exe D 1 exfat mycard  Format drive D: as exFAT with label "mycard"
+cardnuke_win.exe D 2 backup.img   Backup D: to backup.img file
+cardnuke_win.exe D 4              Speed test drive D:</pre>
         </div>
       </div>
     </div>
     <div class="note">
-      Note: Run as Administrator. No external dependencies needed on Windows.
+      <b>Important:</b> Always run as Administrator. The drive letter is just the letter (D, E, F) without colon.
+    </div>
+  </section>
+
+  <section>
+    <h2>❓ FAQ</h2>
+    <div class="bullet-list">
+      <div><b>"Access denied" error?</b><br>Run CMD as Administrator (right-click → Run as administrator)</div>
+      <div><b>"Cannot open drive"?</b><br>Make sure the drive is not in use. Close any open files/folders on that drive.</div>
+      <div><b>Format not working?</b><br>Try closing all programs that might be using the drive, then try again.</div>
+      <div><b>Backup is slow?</b><br>Normal for USB 2.0 or slow cards. USB 3.0 should be 50-200 MB/s.</div>
+      <div><b>What filesystem to use?</b><br>NTFS for large files (64GB+), FAT32 for compatibility, exFAT for modern cards.</div>
+    </div>
+  </section>
+
+  <section id="contact">
+    <h2>📬 Contact</h2>
+    <div class="bullet-list">
+      <div><b>Instagram:</b> @kizunee.cr3</div>
+      <div><b>Discord:</b> @kiz.une</div>
     </div>
   </section>
 `;
