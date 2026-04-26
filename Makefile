@@ -1,24 +1,24 @@
 CXX = g++
 CXXFLAGS = -O2 -Wall -std=c++17
-LDFLAGS =
 
-ifeq ($(OS),Windows_NT)
-    LDFLAGS += -lws2_32 -lsetupapi
-endif
+LINUX_TARGET = cardnuke
+WIN_TARGET = cardnuke_win.exe
+PREFIX = /usr/local/bin
 
-SRCS = main.cpp device.cpp format.cpp health.cpp backup.cpp speed.cpp recover.cpp info.cpp utils.cpp
-OBJS = $(SRCS:.cpp=.o)
-TARGET = cardnuke
+linux: $(LINUX_TARGET)
 
-all: $(TARGET)
+$(LINUX_TARGET): cardnuke.cpp
+	$(CXX) $(CXXFLAGS) -o $@ cardnuke.cpp
 
-$(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+win: $(WIN_TARGET)
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+$(WIN_TARGET): cardnuke_win.cpp
+	$(CXX) $(CXXFLAGS) -o $@ cardnuke_win.cpp -lws2_32 -lsetupapi
+
+install: $(LINUX_TARGET)
+	cp $(LINUX_TARGET) $(PREFIX)/
 
 clean:
-	rm -f $(OBJS) $(TARGET) speed_test
+	rm -f $(LINUX_TARGET) $(WIN_TARGET)
 
-.PHONY: all clean
+.PHONY: all linux win install clean

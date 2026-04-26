@@ -152,7 +152,7 @@ std::string get_filesystem(const std::string& dev) {
                     return m->mnt_type;
                 }
             }
-            endmntend(mnt);
+            endmntent(mnt);
         }
     }
 #endif

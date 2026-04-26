@@ -93,15 +93,15 @@ const localMode = location.protocol === 'file:' ? 'local' : 'hosted';
 
 const data = {
   stats: {
-    scripts: 1,
+    programs: 2,
     modes: 9,
     formatLevels: 4,
-    platforms: 'Linux (+ Windows)',
+    platforms: 'Linux + Windows',
     mode: localMode
   },
   checks: [
     { name: 'C++ build (cardnuke)', ok: true, reason: 'g++ compiled successfully' },
-    { name: 'Speed test binary', ok: true, reason: 'O_DIRECT + fsync' },
+    { name: 'Windows build (cardnuke_win)', ok: true, reason: 'Ready to compile on Windows' },
     { name: 'Repo hygiene', ok: true, reason: 'Python deprecated' },
     { name: 'Risk profile', ok: false, reason: 'Destructive by design; verify device first' }
   ]
@@ -113,8 +113,8 @@ app.innerHTML = `
     <h2>📊 Project Stats</h2>
     <div class="stats">
       <div class="stat">
-        <div class="val">${data.stats.scripts}</div>
-        <div class="lbl">core scripts</div>
+        <div class="val">${data.stats.programs}</div>
+        <div class="lbl">programs</div>
       </div>
       <div class="stat">
         <div class="val">${data.stats.modes}</div>
@@ -139,12 +139,13 @@ app.innerHTML = `
     <h2>🔗 Connected Web + Program</h2>
     <div class="bullet-list">
       <div>The web dashboard documents and links directly to the executable tooling files.</div>
-      <div>Use this page for guidance, then run the same terminal workflow locally with root or administrator privileges.</div>
+      <div>Use this page for guidance, then run the same terminal workflow locally with root (Linux) or Administrator (Windows) privileges.</div>
     </div>
     <div class="link-row">
       <a class="link-pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank">GitHub repo</a>
       <a class="link-pill" href="./README.md" target="_blank">README</a>
-      <a class="link-pill" href="./cardnuke" target="_blank">cardnuke (C++)</a>
+      <a class="link-pill" href="./cardnuke" target="_blank">cardnuke (Linux)</a>
+      <a class="link-pill" href="./cardnuke_win.cpp" target="_blank">cardnuke_win.cpp (Windows)</a>
     </div>
   </section>
 
@@ -152,11 +153,11 @@ app.innerHTML = `
     <h2>⚡ C++ Implementation</h2>
     <div class="bullet-list">
       <div>- Written in C++ for maximum performance</div>
+      <div>- Two separate programs: Linux (cardnuke) and Windows (cardnuke_win.exe)</div>
+      <div>- Uses native APIs: Linux uses libmount/posix, Windows uses WinAPI</div>
+      <div>- No external dependencies on Windows</div>
       <div>- Speed test uses O_DIRECT for true hardware speeds</div>
       <div>- 8MB sequential writes for SD card page alignment</div>
-      <div>- fsync for hardware synchronization</div>
-      <div>- Cache dropping via /proc/sys/vm/drop_caches</div>
-      <div>- Monotonic clock for accurate timing</div>
     </div>
   </section>
 
@@ -177,6 +178,7 @@ app.innerHTML = `
           <div>- Written in C++ for maximum performance</div>
           <div>- True hardware speed measurement</div>
           <div>- Interactive mode with confirmations</div>
+          <div>- No dependencies on Windows</div>
           <div>- Works for repeated SD/USB maintenance</div>
         </div>
       </div>
@@ -184,8 +186,8 @@ app.innerHTML = `
         <h3>Cons</h3>
         <div class="bullet-list">
           <div>- Destructive if wrong disk selected</div>
-          <div>- Some features use external tools</div>
-          <div>- Windows build requires MinGW</div>
+          <div>- Some Linux features use external tools</div>
+          <div>- Windows build requires MinGW-w64</div>
           <div>- Always verify device first</div>
         </div>
       </div>
@@ -203,6 +205,28 @@ app.innerHTML = `
           <span class="reason">${c.reason}</span>
         </div>
       `).join('')}
+    </div>
+  </section>
+
+  <section>
+    <h2>📦 Requirements</h2>
+    <div class="split">
+      <div class="mini">
+        <h3>Linux Build</h3>
+        <div class="bullet-list">
+          <div><b>Build:</b> g++ with C++17</div>
+          <div><b>Runtime:</b> parted, dd, mkfs.*, fsck, badblocks, eject</div>
+          <div><b>Access:</b> sudo (root)</div>
+        </div>
+      </div>
+      <div class="mini">
+        <h3>Windows Build</h3>
+        <div class="bullet-list">
+          <div><b>Build:</b> MinGW-w64 with C++17</div>
+          <div><b>Runtime:</b> None (uses WinAPI)</div>
+          <div><b>Access:</b> Administrator</div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -228,7 +252,7 @@ app.innerHTML = `
         <div class="body">
           <p>Build the C++ binary</p>
           <pre>cd ~/cardnuke
-make</pre>
+make linux</pre>
         </div>
       </div>
       <div class="guide-step">
@@ -250,29 +274,43 @@ sudo ./cardnuke</pre>
   </section>
 
   <section>
-    <h2>🪟 Windows Build</h2>
+    <h2>🪟 Windows Install</h2>
     <div class="guide">
       <div class="guide-step">
         <div class="num">1</div>
         <div class="body">
-          <p>Install MinGW-w64 or use MSYS2</p>
+          <p>Install MinGW-w64 (if not already)</p>
           <pre>pacman -S mingw-w64-x86_64-gcc</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">2</div>
         <div class="body">
-          <p>Compile</p>
-          <pre>g++ -O2 -std=c++17 -o cardnuke.exe cardnuke.cpp</pre>
+          <p>Compile the Windows binary</p>
+          <pre>cd cardnuke
+g++ -O2 -Wall -std=c++17 -o cardnuke_win.exe cardnuke_win.cpp -lws2_32 -lsetupapi</pre>
         </div>
       </div>
       <div class="guide-step">
         <div class="num">3</div>
         <div class="body">
-          <p>Run as Administrator</p>
-          <pre>.\cardnuke.exe</pre>
+          <p>Open Command Prompt as Administrator</p>
+          <pre>Press Win+X → Terminal (Admin)</pre>
         </div>
       </div>
+      <div class="guide-step">
+        <div class="num">4</div>
+        <div class="body">
+          <p>Run from CMD</p>
+          <pre>cardnuke_win.exe --list         # list drives
+cardnuke_win.exe D 1           # format D:
+cardnuke_win.exe D 2 backup.img # backup to file
+cardnuke_win.exe D 4           # speed test</pre>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      Note: Run as Administrator. No external dependencies needed on Windows.
     </div>
   </section>
 `;
