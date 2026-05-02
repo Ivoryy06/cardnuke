@@ -70,7 +70,7 @@ string exec(const string& cmd) {
 
 bool is_admin() {
 #ifdef _WIN32
-    return true;  // Check via IsUserAnAdmin()
+    return true;  
 #else
     return geteuid() == 0;
 #endif
@@ -116,14 +116,14 @@ void list_devices_linux() {
             struct stat st;
             if (stat(path.c_str(), &st) != 0) continue;
 
-            // Get size
+            
             string size_path = "/sys/block/" + name + "/size";
             ifstream sz(size_path);
             long long sectors = 0;
             if (sz) sz >> sectors;
             long long bytes = sectors * 512;
 
-            // Get model
+            
             string model;
             string model_path = "/sys/block/" + name + "/device/model";
             ifstream mf(model_path);
@@ -135,7 +135,7 @@ void list_devices_linux() {
                 else model = "Unknown";
             }
 
-            // Get transport
+            
             string tran;
             string tran_path = "/sys/block/" + name + "/device/transport";
             ifstream tf(tran_path);
@@ -203,7 +203,7 @@ void drop_caches() {
 #endif
 }
 
-// SPEED TEST - uses raw block device to bypass filesystem limitations
+
 void speed_test(const string& dev) {
     log("→ Speed test...");
 
@@ -214,7 +214,7 @@ void speed_test(const string& dev) {
         part = dev;
     }
 
-    // Unmount first to get raw access
+    
     unmount_device(mnt);
 
     const size_t SIZE = 256 * 1024 * 1024;
@@ -233,10 +233,10 @@ void speed_test(const string& dev) {
     double write_speed = 0, read_speed = 0;
     int direct_ok = 0;
 
-    // WRITE TEST - raw block device with O_DIRECT
+    
     int fd = open(part.c_str(), O_RDWR | O_DIRECT);
     if (fd < 0) {
-        // Try fallback without O_DIRECT
+        
         fd = open(part.c_str(), O_RDWR);
         direct_ok = 0;
     } else {
@@ -257,7 +257,7 @@ void speed_test(const string& dev) {
         close(fd);
     }
 
-    // READ TEST
+    
     drop_caches();
     usleep(100000);
 
@@ -287,7 +287,7 @@ void speed_test(const string& dev) {
 #endif
 }
 
-// HEALTH CHECK
+
 void health_check(const string& dev) {
     log("→ Running health / bad block check...");
 
@@ -297,7 +297,7 @@ void health_check(const string& dev) {
         part = dev;
     }
 
-    // Run badblocks
+    
     string cmd = "badblocks -svw " + part;
     log("  Running badblocks read-write scan...");
     
@@ -312,25 +312,25 @@ void health_check(const string& dev) {
 
     log("  Done.");
 #else
-    // Windows: use chkdsk
+    
     string cmd = "chkdsk " + dev;
     system(cmd.c_str());
 #endif
 }
 
-// FORMAT
+
 void do_format(const string& dev, const string& fs, const string& label) {
     log("→ Formatting " + dev + " with " + fs + "...");
 
 #ifndef _WIN32
     string part = get_partition(dev);
     
-    // Unmount
+    
     unmount_device("/tmp/cardnuke_format");
     rmdir("/tmp/cardnuke_format");
     mkdir("/tmp/cardnuke_format", 0755);
 
-    // Wipe first 1MB
+    
     log("  Wiping partition table...");
     int fd = open(part.c_str(), O_WRONLY);
     if (fd >= 0) {
@@ -339,7 +339,7 @@ void do_format(const string& dev, const string& fs, const string& label) {
         close(fd);
     }
 
-    // Format
+    
     log("  Creating " + fs + " filesystem...");
     string cmd = "mkfs." + fs + " -L \"" + label + "\" " + part;
     if (system(cmd.c_str()) != 0) {
@@ -353,7 +353,7 @@ void do_format(const string& dev, const string& fs, const string& label) {
 #endif
 }
 
-// BACKUP
+
 void backup(const string& dev, const string& outfile) {
     log("→ Backing up " + dev + " to " + outfile + "...");
 
@@ -364,7 +364,7 @@ void backup(const string& dev, const string& outfile) {
         return;
     }
 
-    // Calculate hash
+    
     cmd = "sha256sum " + outfile + " > " + outfile + ".sha256";
     system(cmd.c_str());
 
@@ -374,7 +374,7 @@ void backup(const string& dev, const string& outfile) {
 #endif
 }
 
-// RESTORE
+
 void restore(const string& dev, const string& infile) {
     log("→ Restoring " + infile + " to " + dev + "...");
 
@@ -391,7 +391,7 @@ void restore(const string& dev, const string& infile) {
 #endif
 }
 
-// INFO
+
 void card_info(const string& dev) {
     log("→ Card info for " + dev + "...");
 
@@ -403,7 +403,7 @@ void card_info(const string& dev) {
 #endif
 }
 
-// EJECT
+
 void eject(const string& dev) {
     log("→ Ejecting " + dev + "...");
 
@@ -479,7 +479,7 @@ int main(int argc, char* argv[]) {
             string label = ask_choice("Label", "EOS_DIGITAL");
             do_format(dev, fs, label);
         } else if (mode == "2") {
-            // recover - invoke photorec
+            
             log("→ Running PhotoRec...");
             system("photorec");
         } else if (mode == "3") {
@@ -507,7 +507,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // Command-line mode
+    
     string dev = argv[1];
     string mode = argc > 2 ? argv[2] : "";
 

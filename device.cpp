@@ -64,7 +64,7 @@ std::string normalize_device(const std::string& dev) {
 void list_devices_linux() {
     std::vector<std::pair<std::string, std::string>> devs;
 
-    // Check /sys/block for block devices
+    
     DIR* dir = opendir("/sys/block");
     if (dir) {
         struct dirent* ent;
@@ -74,20 +74,20 @@ void list_devices_linux() {
                 std::string path = "/dev/" + name;
                 struct stat st;
                 if (stat(path.c_str(), &st) == 0) {
-                    // Get size
+                    
                     std::string size_path = "/sys/block/" + name + "/size";
                     std::ifstream sz(size_path);
                     long long sectors = 0;
                     if (sz) sz >> sectors;
                     long long bytes = sectors * 512;
 
-                    // Get model/vendor
+                    
                     std::string model_path = "/sys/block/" + name + "/device/model";
                     std::string model;
                     std::ifstream mf(model_path);
                     if (mf) {
                         std::getline(mf, model);
-                        // Trim whitespace
+                        
                         size_t start = model.find_first_not_of(" \t\n\r");
                         size_t end = model.find_last_not_of(" \t\n\r");
                         if (start != std::string::npos) {
@@ -97,7 +97,7 @@ void list_devices_linux() {
                         }
                     }
 
-                    // Get transport
+                    
                     std::string tran;
                     std::string tran_path = "/sys/block/" + name + "/device/transport";
                     std::ifstream tf(tran_path);
@@ -112,7 +112,7 @@ void list_devices_linux() {
         closedir(dir);
     }
 
-    // Print header
+    
     std::cout << "\nDEVICE       SIZE       MODEL                          TRAN     REMOVABLE\n";
     std::cout << "--------------------------------------------------------------------------------------\n";
 
@@ -125,7 +125,7 @@ void list_devices_windows() {
     std::cout << "\nDEVICE       SIZE       MODEL                          TRAN     REMOVABLE\n";
     std::cout << "--------------------------------------------------------------------------------------\n";
 
-    // Use WMI to enumerate disks
+    
     system("wmic diskdrive get model,size,interfacetype,status /format:list");
 }
 #endif
@@ -142,7 +142,7 @@ std::string get_filesystem(const std::string& dev) {
 #ifndef _WIN32
     std::string part = dev;
     if (dev.find("/dev/") == 0) {
-        // Get mount point
+        
         FILE* mnt = setmntent("/proc/mounts", "r");
         if (mnt) {
             struct mntent* m;
@@ -161,7 +161,7 @@ std::string get_filesystem(const std::string& dev) {
 
 bool mount_device(const std::string& dev, const std::string& mnt) {
 #ifdef _WIN32
-    return false;  // Windows uses drive letters
+    return false;  
 #else
     std::string cmd = "mount -o sync " + dev + " " + mnt;
     return system(cmd.c_str()) == 0;
