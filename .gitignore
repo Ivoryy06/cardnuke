@@ -1,2 +1,5 @@
-__pycache__/
-*.py[cod]
+cardnuke
+cardnuke_win.exe
+*.o
+*.img
+*.img.sha256

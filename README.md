@@ -1,177 +1,88 @@
 # cardnuke
 
-> *Wipe, recover, verify, and restore removable media from one terminal workflow.*
+> *Wipe, recover, check, back up and restore SD cards and USB drives from one terminal.*
 
-`cardnuke` is a high-performance SD/USB maintenance toolkit built for real recovery and reformat tasks, not just one-shot wiping.
+A small Linux tool for the card maintenance photographers end up doing: reformatting a card the way the camera likes it, backing it up before a shoot, checking a card you no longer trust, and getting files back after a mistake.
 
-## What it does
+## Safe by default
 
-- **Destructive format modes** - low/medium/high/override wipe levels
-- **Recovery flow** - launches PhotoRec, then deduplicates and organizes output
-- **Health checks** - badblocks scan (read-write)
-- **Backup + restore** - raw `.img` imaging with checksum support
-- **Speed benchmark** - measures actual read/write speed
+A tool that can erase drives should be hard to misuse, so:
 
-## Requirements
+- **Nothing destructive runs until you type the device path back.** `format`, `restore`, `repair` and the destructive options all stop and ask. `--yes` skips the question for scripts.
+- **The speed and health checks leave your data alone.** They read from the card. The speed test measures writing through a temporary file on the card (and deletes it). Raw writing and the read-write bad block scan only run with `--destructive`, and ask first.
+- **It won't touch your running system.** It refuses any disk that holds `/`, `/boot`, `/home`, `/usr` or `/var`, and refuses disks that don't look removable unless you add `--i-know`.
+- **It unmounts the card for you** before anything that writes, and stops if it can't.
+- **No shell is involved.** A strange device name or label can't run commands.
+- **`--dry-run`** shows exactly what would run and changes nothing.
 
-### Linux
+## Install
 
-Build requirements:
-- `g++` (C++17 compiler)
-
-Runtime requirements:
-- `parted`, `dd`, `mkfs.*`, `fsck`
-- `badblocks` (from e2fsprogs)
-- `eject`
-- `sudo` (for root access)
-
-Optional:
-- `testdisk` / `photorec` (for file recovery)
-
-### Windows
-
-Build requirements:
-- MinGW-w64 with C++17 support
-- `g++ -O2 -Wall -std=c++17 -o cardnuke_win.exe cardnuke_win.cpp -lws2_32 -lsetupapi`
-
-Runtime requirements:
-- **Administrator privileges** (right-click CMD → Run as administrator)
-- No external dependencies - uses Windows API directly
-
-## Building
+You need a C++17 compiler (`g++`) and `make`.
 
 ```bash
-# Linux
-make linux
-
-# Or manually
-g++ -O2 -Wall -std=c++17 -o cardnuke cardnuke.cpp
+make
+sudo make install      # optional: copies it to /usr/local/bin
 ```
 
-## Installation
+It shells out to standard tools for the heavy lifting. Install the ones for the modes you use:
 
-### Linux
+| Mode | Needs |
+|------|-------|
+| format | `parted`, `mkfs.vfat` (dosfstools), `mkfs.exfat` (exfatprogs), `mkfs.ext4` (e2fsprogs) |
+| health | `badblocks` (e2fsprogs) |
+| backup, restore | `dd`, `sha256sum` (coreutils) |
+| repair | `fsck.vfat`, `fsck.exfat`, `e2fsck` |
+| recover | `photorec` (testdisk) |
+| eject | `eject` |
+
+## Use
 
 ```bash
-sudo make install
-# Or manually
-sudo cp cardnuke /usr/local/bin/
+sudo ./cardnuke list                          # see the disks
+sudo ./cardnuke /dev/sdb info
+sudo ./cardnuke /dev/sdb speed                # safe
+sudo ./cardnuke /dev/sdb health               # read-only scan
+sudo ./cardnuke /dev/sdb backup card.img      # also writes card.img.sha256
+sudo ./cardnuke /dev/sdb format exfat MYCARD  # asks first
+sudo ./cardnuke /dev/sdb restore card.img     # checks the checksum, then asks
+sudo ./cardnuke /dev/sdb eject
+sudo ./cardnuke                               # interactive menu
 ```
 
-### Windows
+Give it the **whole device** (`/dev/sdb`, `/dev/mmcblk0`), not a partition like `/dev/sdb1`.
 
-1. Compile with MinGW-w64:
-```cmd
-g++ -O2 -Wall -std=c++17 -o cardnuke_win.exe cardnuke_win.cpp -lws2_32 -lsetupapi
-```
+### Modes
 
-2. Copy to a folder in PATH or run from its location:
-```cmd
-copy cardnuke_win.exe C:\Windows\System32\
-```
+| # | Mode | Changes data? | What it does |
+|---|------|---------------|--------------|
+| 1 | `format` | yes | Clears the partition table, makes one partition, formats it (vfat, exfat or ext4) |
+| 2 | `recover` | no | Starts PhotoRec on the card |
+| 3 | `health` | no (yes with `--destructive`) | Bad block scan |
+| 4 | `backup` | no | Saves the card to a `.img` with a SHA-256 checksum |
+| 5 | `speed` | no (yes with `--destructive`) | Read and write benchmark |
+| 6 | `info` | no | Shows card details |
+| 7 | `repair` | yes | Runs the right filesystem checker for each partition |
+| 8 | `restore` | yes | Writes a `.img` back, after checking size and checksum |
+| 9 | `eject` | no | Unmounts and ejects |
 
-## Running
+### Options
 
-### Linux
+`--dry-run`, `--yes`, `--destructive`, `--force` (overwrite an existing backup), `--allow-file` (work on a disk image file, used by the tests), `--i-know` (allow a disk that doesn't look removable).
+
+## Tests
 
 ```bash
-# Interactive mode
-sudo ./cardnuke
-
-# Command-line mode
-sudo ./cardnuke <device> <mode> [options]
-
-# Examples
-sudo ./cardnuke /dev/sdb 5           # speed test
-sudo ./cardnuke /dev/sdb 1 exfat     # format with exfat
-sudo ./cardnuke /dev/sdb 4 backup.img  # backup to file
-sudo ./cardnuke /dev/sdb 3           # health check
+make test
 ```
 
-### Windows
+The tests run against disk image files, so no real card is touched. They check that a speed test and a health scan leave a card byte-for-byte unchanged, that destructive actions refuse without confirmation, that shell commands hidden in a device name or label never run, and that backup and restore round-trip correctly (including refusing a damaged or oversized image).
 
-Open **Command Prompt as Administrator**:
+**What the tests don't cover:** the parts that need real hardware or a mounted card, namely partitioning and formatting, repair, eject, PhotoRec, and the mounted-card write test. Try those on a card you don't care about first.
 
-```cmd
-# List drives
-cardnuke_win.exe --list
+## Other versions in this repository
 
-# Format (NTFS/FAT32/exFAT)
-cardnuke_win.exe D 1 NTFS mycard
+`cardnuke_win.cpp` (Windows), `cardnuke.py` and `cardnuke.sh` are older. They haven't been through the safety changes above and haven't been tested. In particular, don't run an older version's speed test on a card that holds files you want to keep.
 
-# Backup to .img file
-cardnuke_win.exe D 2 backup.img
+## License
 
-# Speed test
-cardnuke_win.exe D 4
-
-# Eject safely
-cardnuke_win.exe D 6
-```
-
-## Supported devices
-
-### Linux
-- `/dev/sdX` - USB/SATA drives
-- `/dev/mmcblkX` - Built-in SD card readers
-- `/dev/nvmeXn1` - NVMe drives
-
-### Windows
-- Drive letter (e.g., `D`, `E`)
-- PhysicalDrive number (e.g., `0`, `1`)
-
-## Modes
-
-| # | Mode | Status | Description |
-|----|------|--------|------------|
-| 1 | format | Stable | Wipe and reformat |
-| 2 | recover | Stable | Launch PhotoRec |
-| 3 | health | Stable | Bad block scan |
-| 4 | backup | Stable | Save to .img |
-| 5 | speed | Stable | Benchmark speed |
-| 6 | info | Stable | Show device info |
-| 7 | repair | Stable | Fix filesystem |
-| 8 | restore | Stable | Flash .img |
-| 9 | eject | Stable | Safely remove |
-
-## Speed test details
-
-The speed test measures actual hardware throughput:
-
-- **Write**: 8MB sequential blocks, fsync for hardware sync
-- **Read**: Unbuffered with cache drop
-- Uses `O_DIRECT` when available for true speeds
-- Test size: 256MB
-
-Results reflect your actual reader/card combination:
-- UHS-I: ~50-100 MB/s
-- UHS-II: ~150-300 MB/s
-- USB 2.0: ~20-40 MB/s
-- USB 3.0: ~100-200 MB/s
-
-## Performance
-
-Written in C++ for maximum performance.
-
-```text
-Python cardnuke.py  →  C++ cardnuke
-    ~50 MB/s           ~300 MB/s
-```
-
-## Safety first
-
-This tool can permanently destroy data.
-
-- Always target whole devices intentionally
-- Double-check with `lsblk` (Linux) or `--list` (Windows) before confirming
-- Unmount mounted partitions before destructive operations
-- Disconnect unrelated external drives when possible
-
-If you're not sure which device is your card, stop and verify first.
-
-## Notes
-
-- Use whole-device nodes (like `/dev/sdb`) for format/restore on Linux
-- On Windows, use drive letters without `:` (e.g., `D` not `D:`)
-- MMC/SD naming handled automatically (`/dev/mmcblk0p1` vs `/dev/mmcblk0boot0`)
-- Physical card speed depends on reader + card + bus
+Use it at your own risk, and always keep a backup of anything that matters.
