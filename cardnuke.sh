@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# cardnuke.sh — older shell version. made by Ivoryy06 ♡
 set -e
 
 if [[ $EUID -ne 0 ]]; then
@@ -14,6 +15,17 @@ else
   lsblk -dpno NAME,SIZE,MODEL | grep -v "loop"
   read -rp "Enter device (e.g. /dev/sdb): " DEV
 fi
+
+[[ -b "$DEV" ]] || { echo "Not a block device: $DEV"; exit 1; }
+
+# Refuse a disk that holds the running system
+for mp in / /boot /boot/efi /home /usr /var; do
+  src="$(findmnt -n -o SOURCE --target "$mp" 2>/dev/null || true)"
+  if [[ -n "$src" && ( "$src" == "$DEV" || "$src" == "$DEV"* ) ]]; then
+    echo "Refusing: $DEV holds $mp, which is part of your running system."
+    exit 1
+  fi
+done
 
 # Confirm
 echo ""
@@ -101,3 +113,4 @@ esac
 
 echo ""
 echo "✓ Done. $DEV has been nuked and formatted as $FS."
+echo "made by Ivoryy06 ♡"

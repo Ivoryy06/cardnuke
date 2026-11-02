@@ -1,7 +1,13 @@
 #include "cardnuke_win.h"
+// cardnuke (Windows): format, back up, restore, benchmark and eject drives.
+// Inputs are validated before use, the Windows system drive is refused, and
+// every destructive mode asks first. made by Ivoryy06 ♡
 #include <windows.h>
 #include <winioctl.h>
 #include <setupapi.h>
+#include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -10,10 +16,71 @@
 #include <iomanip>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
 static const size_t SECTOR_SIZE = 512;
+
+// All user input is checked before it reaches `format` or PowerShell.
+static string upper(string s) {
+    for (char& c : s) c = (char)toupper((unsigned char)c);
+    return s;
+}
+
+static string normalize_drive(const string& d) {
+    string s = d;
+    if (s.size() == 2 && isalpha((unsigned char)s[0]) && s[1] == ':') s = s.substr(0, 1);
+    if (s.size() == 1) s[0] = (char)toupper((unsigned char)s[0]);
+    return s;
+}
+
+static bool valid_drive_letter(const string& d) {
+    return d.size() == 1 && isalpha((unsigned char)d[0]);
+}
+
+static bool valid_label(const string& s, size_t maxlen) {
+    if (s.empty() || s.size() > maxlen) return false;
+    return all_of(s.begin(), s.end(), [](unsigned char c) {
+        return isalnum(c) || c == ' ' || c == '-' || c == '_';
+    });
+}
+
+static bool valid_disk_target(const string& d) {
+    if (valid_drive_letter(d)) return true;
+    return !d.empty() && all_of(d.begin(), d.end(), [](unsigned char c) {
+        return isdigit(c);
+    });
+}
+
+// Refuses the disk Windows is running from (the Linux version does the same).
+static bool is_system_target(const string& drive) {
+    if (valid_drive_letter(drive)) {
+        char win[MAX_PATH];
+        if (GetWindowsDirectoryA(win, MAX_PATH)) {
+            return (char)toupper((unsigned char)win[0]) == drive[0];
+        }
+        return false;
+    }
+
+    string id = drive;
+    size_t pos = id.find("PhysicalDrive");
+    if (pos != string::npos) id = id.substr(pos + 13);
+
+    bool digits = !id.empty() && all_of(id.begin(), id.end(), [](unsigned char c) { return isdigit(c); });
+    if (!digits) return false;
+
+    HANDLE h = CreateFileA("\\\\.\\C:", GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    STORAGE_DEVICE_NUMBER info = {};
+    DWORD bytes = 0;
+    BOOL ok = DeviceIoControl(h, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0,
+        &info, sizeof(info), &bytes, NULL);
+    CloseHandle(h);
+    return ok && to_string(info.DeviceNumber) == id;
+}
 
 int ask_yes_no(const char* prompt) {
     cout << prompt << " [y/N]: ";
@@ -43,6 +110,11 @@ void log(const string& msg) {
 }
 
 HANDLE open_device(const char* dev, BOOL write) {
+    if (!dev || !*dev) {
+        cerr << "Error: No device given." << endl;
+        return INVALID_HANDLE_VALUE;
+    }
+
     string path;
     if (strncmp(dev, "\\\\.\\PhysicalDrive", 17) == 0) {
         path = dev;
@@ -126,14 +198,21 @@ BOOL list_drives_windows() {
                     string model = "Unknown";
                     ULONGLONG size = 0;
 
-                    STORAGE_PROPERTY_QUERY query = {PropertyStandardQuery, 0, sizeof(STORAGE_DESCRIPTOR_HEADER)};
-                    STORAGE_DEVICE_DESCRIPTOR* desc = (STORAGE_DEVICE_DESCRIPTOR*)new char[1024];
-                    desc->Size = 1024;
+                    STORAGE_PROPERTY_QUERY query = {};
+                    query.PropertyId = StorageDeviceProperty;
+                    query.QueryType = PropertyStandardQuery;
+                    vector<char> descBuf(1024, 0);
+                    auto* desc = reinterpret_cast<STORAGE_DEVICE_DESCRIPTOR*>(descBuf.data());
+                    desc->Size = (DWORD)descBuf.size();
                     BOOL ok = DeviceIoControl(h, IOCTL_STORAGE_QUERY_PROPERTY, &query, sizeof(query),
-                        desc, 1024, &bytes, NULL);
+                        desc, (DWORD)descBuf.size(), &bytes, NULL);
 
-                    if (ok && desc->VendorIdOffset) {
-                        model = (char*)desc + desc->VendorIdOffset;
+                    if (ok && desc->VendorIdOffset && desc->VendorIdOffset < descBuf.size()) {
+                        const char* vendor = descBuf.data() + desc->VendorIdOffset;
+                        size_t avail = descBuf.size() - desc->VendorIdOffset;
+                        size_t len = 0;
+                        while (len < avail && vendor[len]) len++;
+                        model = string(vendor, len);
                     }
                     if (ok && desc->Size > 0) {
                         size = get_device_size(h);
@@ -143,10 +222,9 @@ BOOL list_drives_windows() {
                     string tran = (type == DRIVE_REMOVABLE) ? "USB" : "SATA";
 
                     cout << letter << ":  " << fixed << setprecision(1) << setw(6) << gb << "G   "
-                        << setw(-30) << model << " " << tran << "   "
+                        << left << setw(30) << model << tran << "   "
                         << (type == DRIVE_REMOVABLE ? "Yes" : "No") << "\n";
 
-                    delete[] (char*)desc;
                 }
                 CloseHandle(h);
             }
@@ -191,8 +269,30 @@ bool is_admin() {
     return !!isAdmin;
 }
 
-void format_drive(const string& drive, const string& fs, const string& label) {
-    log("Formatting " + drive + ": with " + fs + "...");
+void format_drive(const string& rawDrive, const string& fs, const string& label) {
+    string drive = normalize_drive(rawDrive);
+    if (!valid_drive_letter(drive)) {
+        log("Format needs a single drive letter, like D.");
+        return;
+    }
+
+    string filesystem = upper(fs);
+    if (filesystem != "NTFS" && filesystem != "FAT32" && filesystem != "EXFAT") {
+        log("Filesystem must be NTFS, FAT32 or exFAT.");
+        return;
+    }
+
+    size_t maxLabel = filesystem == "NTFS" ? 32 : 11;
+    if (!valid_label(label, maxLabel)) {
+        log("Label can use letters, numbers, spaces, - and _ (up to " + to_string(maxLabel) + " characters).");
+        return;
+    }
+    if (is_system_target(drive)) {
+        log("Refusing: " + drive + ": is the drive Windows is running from.");
+        return;
+    }
+
+    log("Formatting " + drive + ": with " + filesystem + "...");
 
     cout << "\n⚠️  WARNING: This will ERASE ALL DATA on drive " << drive << ":!\n";
     if (!ask_yes_no("Are you sure you want to continue?")) {
@@ -200,28 +300,26 @@ void format_drive(const string& drive, const string& fs, const string& label) {
         return;
     }
 
-    string volPath = "\\\\.\\" + drive;
-    HANDLE h = CreateFileA(volPath.c_str(), GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-        FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH, NULL);
+    // No shell variables here: every part of this command was validated above.
+    string cmd = "format " + drive + ": /FS:" + filesystem + " /V:\"" + label + "\" /Q /Y";
+    log("Running: " + cmd);
+    int rc = system(cmd.c_str());
 
-    if (h == INVALID_HANDLE_VALUE) {
-        log("Error: Cannot open drive");
+    if (rc == 0) log("Done.");
+    else log("Format exited with code " + to_string(rc) + ".");
+}
+
+void backup_drive(const string& rawDrive, const string& outfile) {
+    string drive = normalize_drive(rawDrive);
+    if (!valid_disk_target(drive)) {
+        log("Give a drive letter like D, or a disk number like 0.");
+        return;
+    }
+    if (outfile.empty() || outfile.find("\\\\.\\") == 0 || (outfile.size() == 2 && outfile[1] == ':')) {
+        log("Choose a normal file for the backup, not a drive.");
         return;
     }
 
-    DELETE_USN_JOURNAL_DATA usnData = {0};
-    DeviceIoControl(h, FSCTL_DELETE_USN_JOURNAL, &usnData, sizeof(usnData), NULL, 0, NULL, NULL);
-    CloseHandle(h);
-
-    string cmd = "format " + drive + " /FS:" + fs + " /V:" + label + " /Q /Y";
-    log("Running: " + cmd);
-    system(cmd.c_str());
-
-    log("Done.");
-}
-
-void backup_drive(const string& drive, const string& outfile) {
     log("Backing up " + drive + ": to " + outfile + "...");
 
     cout << "\nThis will backup drive " << drive << ": to " << outfile << "\n";
@@ -230,14 +328,18 @@ void backup_drive(const string& drive, const string& outfile) {
         return;
     }
 
-    string volPath = "\\\\.\\" + drive;
-    HANDLE h = open_device(volPath.c_str(), FALSE);
+    HANDLE h = open_device(drive.c_str(), FALSE);
     if (h == INVALID_HANDLE_VALUE) {
         return;
     }
 
     uint64_t size = get_device_size(h);
-    size_t sectors = size / SECTOR_SIZE;
+    if (size == 0) {
+        log("Error: Could not read the drive size.");
+        CloseHandle(h);
+        return;
+    }
+    size_t sectors = (size_t)(size / SECTOR_SIZE);
 
     const size_t CHUNK = 8 * 1024 * 1024 / SECTOR_SIZE;
     char* buf = (char*)VirtualAlloc(NULL, CHUNK * SECTOR_SIZE,
@@ -258,15 +360,21 @@ void backup_drive(const string& drive, const string& outfile) {
     }
 
     size_t written = 0;
+    bool failed = false;
     double startTime = (double)GetTickCount();
 
     while (written < sectors) {
         size_t todo = min(CHUNK, sectors - written);
         if (!read_sectors(h, written, buf, todo)) {
             log("Error: Read failed at sector " + to_string(written));
+            failed = true;
             break;
         }
-        fwrite(buf, SECTOR_SIZE, todo, out);
+        if (fwrite(buf, SECTOR_SIZE, todo, out) != todo) {
+            log("Error: Write to the image file failed.");
+            failed = true;
+            break;
+        }
         written += todo;
 
         double elapsed = (GetTickCount() - startTime) / 1000.0;
@@ -275,14 +383,29 @@ void backup_drive(const string& drive, const string& outfile) {
         cout << "\r  Written: " << fixed << setprecision(1) << mb << " MB  Speed: " << speed << " MB/s   " << flush;
     }
 
+    if (fflush(out) != 0) failed = true;
     fclose(out);
     CloseHandle(h);
     VirtualFree(buf, 0, MEM_RELEASE);
 
+    if (failed) {
+        log("Backup stopped early — the image is incomplete.");
+        return;
+    }
     log("Done.");
 }
 
-void restore_drive(const string& infile, const string& drive) {
+void restore_drive(const string& infile, const string& rawDrive) {
+    string drive = normalize_drive(rawDrive);
+    if (!valid_disk_target(drive)) {
+        log("Give a drive letter like D, or a disk number like 0.");
+        return;
+    }
+    if (is_system_target(drive)) {
+        log("Refusing: " + drive + " is the drive Windows is running from.");
+        return;
+    }
+
     log("Restoring " + infile + " to " + drive + ":...");
 
     cout << "\n⚠️  WARNING: This will ERASE ALL DATA on drive " << drive << ":!\n";
@@ -298,18 +421,32 @@ void restore_drive(const string& infile, const string& drive) {
         return;
     }
 
-    string volPath = "\\\\.\\" + drive;
-    HANDLE h = open_device(volPath.c_str(), TRUE);
+    HANDLE h = open_device(drive.c_str(), TRUE);
     if (h == INVALID_HANDLE_VALUE) {
         fclose(in);
         return;
     }
 
-    fseek(in, 0, SEEK_END);
-    long size = ftell(in);
-    fseek(in, 0, SEEK_SET);
+    _fseeki64(in, 0, SEEK_END);
+    long long size = _ftelli64(in);
+    _fseeki64(in, 0, SEEK_SET);
 
-    size_t sectors = size / SECTOR_SIZE;
+    if (size <= 0) {
+        log("Error: The image file is empty.");
+        fclose(in);
+        CloseHandle(h);
+        return;
+    }
+
+    uint64_t deviceSize = get_device_size(h);
+    if (deviceSize && (uint64_t)size > deviceSize) {
+        log("Error: The image is bigger than the drive. Nothing was written.");
+        fclose(in);
+        CloseHandle(h);
+        return;
+    }
+
+    size_t sectors = (size_t)(size / SECTOR_SIZE);
     const size_t CHUNK = 8 * 1024 * 1024 / SECTOR_SIZE;
     char* buf = (char*)VirtualAlloc(NULL, CHUNK * SECTOR_SIZE,
         MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -322,13 +459,19 @@ void restore_drive(const string& infile, const string& drive) {
     }
 
     size_t written = 0;
+    bool failed = false;
     double startTime = (double)GetTickCount();
 
     while (written < sectors) {
         size_t todo = min(CHUNK, sectors - written);
-        fread(buf, SECTOR_SIZE, todo, in);
+        if (fread(buf, SECTOR_SIZE, todo, in) != todo) {
+            log("Error: The image ended early. The drive may be partly written.");
+            failed = true;
+            break;
+        }
         if (!write_sectors(h, written, buf, todo)) {
             log("Error: Write failed at sector " + to_string(written));
+            failed = true;
             break;
         }
         written += todo;
@@ -344,19 +487,44 @@ void restore_drive(const string& infile, const string& drive) {
     CloseHandle(h);
     VirtualFree(buf, 0, MEM_RELEASE);
 
+    if (failed) {
+        log("Restore stopped early.");
+        return;
+    }
     log("Done.");
 }
 
-void speed_test_drive(const string& drive) {
-    log("Speed test for " + drive + ":...");
+void speed_test_drive(const string& rawDrive) {
+    string drive = normalize_drive(rawDrive);
+    if (!valid_disk_target(drive)) {
+        log("Give a drive letter like D, or a disk number like 0.");
+        return;
+    }
+    if (is_system_target(drive)) {
+        log("Refusing: " + drive + " is the drive Windows is running from.");
+        return;
+    }
 
-    string volPath = "\\\\.\\" + drive;
-    HANDLE h = open_device(volPath.c_str(), TRUE);
+    log("Speed test for " + drive + ":...");
+    cout << "\n⚠️  WARNING: This writes 256 MB to the start of drive " << drive
+         << ": and ERASES the data there.\n";
+    if (!ask_yes_no("Continue?")) {
+        log("Cancelled.");
+        return;
+    }
+
+    HANDLE h = open_device(drive.c_str(), TRUE);
     if (h == INVALID_HANDLE_VALUE) {
         return;
     }
 
     uint64_t size = get_device_size(h);
+    if (size < 8 * 1024 * 1024) {
+        log("Error: The drive is too small to test.");
+        CloseHandle(h);
+        return;
+    }
+
     const size_t TEST_SIZE = 256 * 1024 * 1024;
     const size_t CHUNK = 8 * 1024 * 1024;
 
@@ -371,40 +539,61 @@ void speed_test_drive(const string& drive) {
         buf[i] = (i * 31) & 0xFF;
     }
 
-    double writeSpeed = 0, readSpeed = 0;
-    DWORD startTime = GetTickCount();
+    size_t chunks = min(TEST_SIZE / CHUNK, (size_t)(size / CHUNK));
+    size_t bytes = chunks * CHUNK;
+    bool failed = false;
 
-    size_t todo = min(TEST_SIZE / CHUNK, size / SECTOR_SIZE);
-    for (size_t i = 0; i < todo; i++) {
-        write_sectors(h, i * (CHUNK / SECTOR_SIZE), buf, CHUNK / SECTOR_SIZE);
+    DWORD startTime = GetTickCount();
+    for (size_t i = 0; i < chunks; i++) {
+        if (!write_sectors(h, i * (CHUNK / SECTOR_SIZE), buf, CHUNK / SECTOR_SIZE)) {
+            log("Error: Write failed during the speed test.");
+            failed = true;
+            break;
+        }
     }
     FlushFileBuffers(h);
     double writeTime = (GetTickCount() - startTime) / 1000.0;
-    writeSpeed = TEST_SIZE / writeTime / 1024.0 / 1024.0;
 
-    startTime = GetTickCount();
-    for (size_t i = 0; i < todo; i++) {
-        read_sectors(h, i * (CHUNK / SECTOR_SIZE), buf, CHUNK / SECTOR_SIZE);
+    DWORD readTime = 0;
+    if (!failed) {
+        startTime = GetTickCount();
+        for (size_t i = 0; i < chunks; i++) {
+            if (!read_sectors(h, i * (CHUNK / SECTOR_SIZE), buf, CHUNK / SECTOR_SIZE)) {
+                log("Error: Read failed during the speed test.");
+                failed = true;
+                break;
+            }
+        }
+        readTime = GetTickCount() - startTime;
     }
-    double readTime = (GetTickCount() - startTime) / 1000.0;
-    readSpeed = TEST_SIZE / readTime / 1024.0 / 1024.0;
 
     CloseHandle(h);
     VirtualFree(buf, 0, MEM_RELEASE);
+    if (failed) return;
+
+    double writeSpeed = writeTime > 0 ? bytes / writeTime / 1024.0 / 1024.0 : 0;
+    double readSpeed = readTime > 0 ? bytes / (readTime / 1000.0) / 1024.0 / 1024.0 : 0;
 
     ostringstream ss;
-    ss << "  Write: " << fixed << setprecision(1) << writeSpeed << " MB/s  Read: " << readSpeed << " MB/s";
+    ss << "  Write: " << fixed << setprecision(1) << writeSpeed
+       << " MB/s  Read: " << readSpeed << " MB/s";
     log(ss.str());
 }
 
-void eject_drive(const string& drive) {
+void eject_drive(const string& rawDrive) {
+    string drive = normalize_drive(rawDrive);
+    if (!valid_drive_letter(drive)) {
+        log("Eject needs a drive letter, like D.");
+        return;
+    }
+
     log("Ejecting " + drive + ":...");
 
-    string cmd = "powershell -Command \"(Get-WmiObject -Class Win32_PhysicalDisk | "
-               "Where-Object {$_.DeviceID -match '" + drive + "'}).Eject()\"";
-    system(cmd.c_str());
-
-    log("Done.");
+    string cmd = "powershell -NoProfile -Command \"(New-Object -ComObject Shell.Application)"
+                 ".Namespace(17).ParseName('" + drive + ":").InvokeVerb('Eject')\"";
+    int rc = system(cmd.c_str());
+    if (rc == 0) log("Done.");
+    else log("Eject returned an error — close anything using the drive and try again.");
 }
 
 void print_usage(const char* prog) {
@@ -415,16 +604,17 @@ void print_usage(const char* prog) {
     cout << "Modes:\n";
     cout << "  1 format  - wipe/reformat (NTFS/FAT32/exFAT)\n";
     cout << "  2 backup  - image the drive to a .img file\n";
-    cout << "  3 restore - flash a .img backup back to drive\n";
-    cout << "  4 speed   - benchmark read/write speed\n";
+    cout << "  3 restore - flash a .img backup back to drive (erases the drive)\n";
+    cout << "  4 speed   - benchmark read/write speed (erases the start of the drive)\n";
     cout << "  5 info    - show drive info\n";
     cout << "  6 eject   - safely remove drive\n";
     cout << "\nExamples:\n";
     cout << "  " << prog << " D 1             # format drive D:\n";
     cout << "  " << prog << " D 1 exfat mycard  # format D: as exFAT with label\n";
     cout << "  " << prog << " D 2 backup.img   # backup D: to file\n";
-    cout << "  " << prog << " D 4             # speed test D:\n";
+    cout << "  " << prog << " D 4             # speed test D: (asks first)\n";
     cout << "  " << prog << " 0 4              # speed test PhysicalDrive0\n";
+    cout << "\nmade by Ivoryy06 ♡\n";
 }
 
 void print_menu() {
@@ -432,11 +622,12 @@ void print_menu() {
     cout << "Choose an action:\n";
     cout << "  [1] Format    - Wipe and reformat drive\n";
     cout << "  [2] Backup    - Backup drive to .img file\n";
-    cout << "  [3] Restore  - Restore .img file to drive\n";
-    cout << "  [4] Speed    - Benchmark read/write speed\n";
-    cout << "  [5] Info     - Show drive information\n";
-    cout << "  [6] Eject   - Safely remove drive\n";
-    cout << "  [Q] Quit    - Exit\n";
+    cout << "  [3] Restore   - Restore .img file to drive (erases it)\n";
+    cout << "  [4] Speed     - Benchmark read/write speed (erases the start)\n";
+    cout << "  [5] Info      - Show drive information\n";
+    cout << "  [6] Eject     - Safely remove drive\n";
+    cout << "  [Q] Quit      - Exit\n";
+    cout << "\nmade by Ivoryy06 ♡\n";
 }
 
 int main(int argc, char* argv[]) {

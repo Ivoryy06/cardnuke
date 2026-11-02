@@ -2,6 +2,8 @@
 
 > *Wipe, recover, check, back up and restore SD cards and USB drives from one terminal.*
 
+Made by [Ivoryy06](https://github.com/Ivoryy06) ♡
+
 A small Linux tool for the card maintenance photographers end up doing: reformatting a card the way the camera likes it, backing it up before a shoot, checking a card you no longer trust, and getting files back after a mistake.
 
 ## Safe by default
@@ -81,8 +83,10 @@ The tests run against disk image files, so no real card is touched. They check t
 
 ## Other versions in this repository
 
-`cardnuke_win.cpp` (Windows), `cardnuke.py` and `cardnuke.sh` are older. They haven't been through the safety changes above and haven't been tested. In particular, don't run an older version's speed test on a card that holds files you want to keep.
+`cardnuke_win.cpp` (Windows), `cardnuke.py` and `cardnuke.sh` cover the same modes on other setups. They were reviewed and hardened along with the Linux tool: the Windows build validates the drive letter and label, refuses the Windows system drive, warns before its destructive speed test and uses a working eject call. The Python script validates labels before handing them to diskpart and quotes notifications safely.
+
+They are still convenience ports, not the tested path. In particular, the Windows build was not compiled on the machine this was written on, and the speed test writes over the first 256 MB of a drive, so use a card you don't care about first.
 
 ## License
 
-Use it at your own risk, and always keep a backup of anything that matters.
+Use it at your own risk, and always keep a backup of anything that matters. made by Ivoryy06 ♡

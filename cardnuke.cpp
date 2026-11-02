@@ -182,9 +182,9 @@ static bool safety_check(const Dev& d) {
     if (d.is_file) return true;
     char real[PATH_MAX]; string sys = "/sys/block/" + d.name;
     bool usb = realpath(sys.c_str(), real) && string(real).find("/usb") != string::npos;
-    bool mmc = d.name.rfind("mmcblk", 0) == 0;
+    bool sd = slurp1(sys + "/device/type") == "SD";   // SD cards only, not internal eMMC
     bool removable = slurp1(sys + "/removable") == "1";
-    if (!(usb || mmc || removable) && !O.i_know) {
+    if (!(usb || sd || removable) && !O.i_know) {
         warn("Refusing: " + d.path + " doesn't look like a removable card or USB drive (it may be an internal disk).");
         warn("If you're certain, run again with --i-know.");
         return false;
@@ -261,6 +261,8 @@ static int cmd_speed(const Dev& d) {
     for (size_t i = 0; i < CHUNK; i++) buf[i] = (char)((i * 31) & 0xFF);
 
     unsigned long long want = d.bytes ? std::min<unsigned long long>(LIMIT, d.bytes) : LIMIT;
+    if (want >= 4096) want -= want % 4096;   // O_DIRECT wants whole blocks
+    if (want == 0) want = CHUNK;
     int fd = open(d.path.c_str(), O_RDONLY | O_DIRECT);
     bool direct = fd >= 0;
     if (fd < 0) fd = open(d.path.c_str(), O_RDONLY);
@@ -425,7 +427,7 @@ static int cmd_repair(const Dev& d) {
         say("  checking " + part + " (" + type + ")");
         int rc = run(cmd);
         if (rc == 127) { warn(cmd[0] + " isn't installed."); continue; }
-        if (rc <= 1) fixed++;   // 0 = clean, 1 = errors were fixed
+        if (rc >= 0 && rc <= 1) fixed++;   // 0 = clean, 1 = errors were fixed
         else warn("  " + part + ": the checker reported a problem it could not fix (exit " + std::to_string(rc) + ")");
     }
     if (!found) { warn("No partitions found on " + d.path + "."); return EXIT_FAILED; }
@@ -462,7 +464,8 @@ static void print_modes() {
         "  [6] info     show card details\n"
         "  [7] repair   fix a damaged filesystem, keeping the files\n"
         "  [8] restore  write a .img backup back to the card         (destructive)\n"
-        "  [9] eject    unmount and eject safely\n";
+        "  [9] eject    unmount and eject safely\n"
+        "\n  made by Ivoryy06 ♡\n";
 }
 
 static void usage(const char* me) {

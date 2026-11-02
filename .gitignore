@@ -3,3 +3,5 @@ cardnuke_win.exe
 *.o
 *.img
 *.img.sha256
+__pycache__/
+*.pyc

@@ -1,352 +1,458 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>cardnuke · dashboard</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="cardnuke: wipe, back up, recover and check SD cards and USB drives from one terminal.">
+<title>cardnuke</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Caveat:wght@500;600&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+:root{
+  color-scheme:dark;
+  --bg:#1b1023;
+  --panel:#251631;
+  --panel-2:#33203f;
+  --line:#4a2e5c;
+  --text:#fff0fb;
+  --muted:#cbb0da;
+  --primary:#ff8fc9;
+  --accent:#d8b4fe;
+  --ok:#a7f3c9;
+  --warn:#ffd08a;
+  --blue:#9ad9ff;
+  --max:1120px;
+}
+body{
+  min-height:100vh;
+  font-family:"Quicksand",system-ui,sans-serif;
+  font-size:15px;line-height:1.65;
+  color:var(--text);
+  background:
+    radial-gradient(720px 520px at 12% -8%,rgba(216,180,254,.16),transparent 62%),
+    radial-gradient(640px 460px at 92% 4%,rgba(255,143,201,.14),transparent 60%),
+    var(--bg);
+  background-attachment:fixed;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:radial-gradient(rgba(255,240,251,.16) 1px,transparent 1px);
+  background-size:34px 34px;opacity:.28;
+  mask-image:linear-gradient(to bottom,#000,transparent 78%);
+}
+a{color:var(--primary);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+::selection{background:rgba(255,143,201,.32)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+:focus-visible{outline:2px dashed var(--primary);outline-offset:3px}
 
-    :root {
-      --bg:      #f5fff8;
-      --surface: #f0fdf5;
-      --border:  #c4f0d8;
-      --accent:  #34a853;
-      --muted:   #70a088;
-      --text:    #0d3a20;
-      --ok:      #6dbf8a;
-      --fail:    #e07070;
-      --warn:    #e0b060;
-      --code-bg: #e8f5ef;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg:      #0d1a12;
-        --surface: #152a1a;
-        --border:  #306a40;
-        --accent:  #a0f0c0;
-        --muted:   #70a088;
-        --text:    #d0f0e0;
-        --ok:      #5aaf78;
-        --fail:    #d06060;
-        --warn:    #c09040;
-        --code-bg: #1f3a25;
-      }
-    }
+.stage{
+  position:relative;z-index:1;
+  width:min(var(--max),100% - 32px);
+  margin:0 auto;padding:clamp(20px,4vw,44px) 0 28px;
+  display:grid;grid-template-columns:290px minmax(0,1fr);
+  gap:clamp(20px,3vw,40px);align-items:start;
+}
+.stage > *{min-width:0}
+.side{position:sticky;top:clamp(16px,4vw,32px);display:grid;gap:16px}
 
-    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    header { padding: 2rem 1.5rem 1rem; max-width: 900px; margin: 0 auto; display: flex; align-items: baseline; gap: 1rem; }
-    header h1 { font-size: 1.6rem; font-weight: 600; color: var(--accent); }
-    header .sub { font-size: 0.8rem; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
-    #gen-time { margin-left: auto; font-size: 0.75rem; color: var(--muted); }
+.profile{
+  position:relative;overflow:hidden;
+  background:linear-gradient(165deg,#2a1837,#20122b);
+  border:1px solid var(--line);border-radius:26px;
+  padding:22px 22px 18px;
+  box-shadow:0 20px 45px -28px rgba(0,0,0,.9),0 0 0 1px rgba(255,255,255,.02) inset;
+}
+.profile::after{
+  content:"";position:absolute;right:-46px;top:-56px;width:150px;height:150px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,143,201,.26),transparent 68%);
+  pointer-events:none;
+}
+.avatar{
+  width:58px;height:58px;border-radius:50%;
+  display:grid;place-items:center;
+  font-family:"Baloo 2",cursive;font-size:24px;font-weight:700;color:#2a1330;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  box-shadow:0 0 0 4px rgba(255,143,201,.12),0 10px 20px -10px rgba(255,143,201,.7);
+  margin-bottom:14px;
+}
+.name{font-family:"Baloo 2",cursive;font-size:31px;line-height:1.05;letter-spacing:-.02em}
+.role{font-family:"Caveat",cursive;font-size:21px;line-height:1.25;color:var(--accent);margin-top:2px}
+.bio{font-size:13.5px;color:var(--muted);margin-top:12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.chip{
+  font-size:11px;letter-spacing:.02em;color:var(--muted);
+  border:1px solid var(--line);border-radius:99px;padding:3px 9px;
+  background:rgba(255,240,251,.03);
+}
+.chip.pink{border-color:rgba(255,143,201,.4);color:var(--primary);background:rgba(255,143,201,.08)}
 
-    main { max-width: 900px; margin: 0 auto; padding: 0 1.5rem 3rem; display: grid; gap: 1rem; }
-    section { background: var(--surface); border: 0.5px solid var(--border); border-radius: 14px; padding: 1.2rem 1.4rem; }
-    section h2 { font-size: 0.72rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 1rem; }
+.nav{margin-top:20px;padding-top:16px;border-top:1px dashed var(--line);display:grid;gap:3px}
+.nav-label{font-family:"Caveat",cursive;font-size:19px;color:var(--muted);margin:0 0 4px 2px}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 10px;border-radius:12px;
+  color:var(--muted);font-size:13.5px;
+}
+.nav-item:hover{background:rgba(255,240,251,.05);color:var(--text);transform:translateX(2px);text-decoration:none}
+.nav-item .key{
+  width:22px;height:22px;border-radius:7px;flex-shrink:0;
+  display:grid;place-items:center;
+  font-size:11px;font-weight:700;color:var(--muted);
+  border:1px solid var(--line);background:rgba(0,0,0,.16);
+}
 
-    .stats { display: flex; flex-wrap: wrap; gap: 1rem; }
-    .stat { flex: 1 1 140px; }
-    .stat .val { font-size: 1.4rem; font-weight: 600; color: var(--accent); }
-    .stat .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+.side-links{display:flex;gap:8px;flex-wrap:wrap}
+.ghost{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12.5px;color:var(--muted);
+  border:1px solid var(--line);border-radius:999px;padding:6px 12px;
+  background:rgba(255,240,251,.03);
+}
+.ghost:hover{color:var(--text);border-color:rgba(255,143,201,.45);text-decoration:none}
+.side-credit{font-size:12px;color:var(--muted);padding-left:2px}
+.side-credit a{color:var(--accent)}
+.heart{color:var(--primary)}
 
-    .pill { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.5px; }
-    .pill.ok   { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
-    .pill.fail { background: color-mix(in srgb, var(--fail) 15%, transparent); color: var(--fail); }
-    .pill.warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+main{display:grid;gap:18px;padding-bottom:8px}
+.hero{
+  position:relative;overflow:hidden;
+  background:
+    radial-gradient(420px 220px at 88% -20%,rgba(255,143,201,.2),transparent 70%),
+    linear-gradient(160deg,#2b1839,#221430);
+  border:1px solid var(--line);border-radius:26px;
+  padding:clamp(22px,3.4vw,34px);
+}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--primary);margin-bottom:12px;
+}
+.eyebrow::before{content:"";width:22px;height:1px;background:var(--primary)}
+.hero h1{
+  font-family:"Baloo 2",cursive;font-weight:700;
+  font-size:clamp(30px,4.4vw,46px);line-height:1.08;letter-spacing:-.02em;
+}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero p{color:var(--muted);max-width:56ch;margin-top:12px;font-size:14.5px}
+.hero-note{font-family:"Caveat",cursive;font-size:22px;color:var(--muted);margin-top:14px;transform:rotate(-.7deg)}
 
-    .check-list { display: flex; flex-direction: column; gap: 8px; }
-    .check-row { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
-    .check-row .icon { font-size: 1rem; width: 1.2rem; text-align: center; }
-    .check-row .name { flex: 1; }
-    .check-row .reason { font-size: 0.75rem; color: var(--muted); }
-    .split { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-    .mini { border: 0.5px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; }
-    .mini h3 { font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 0.6rem; }
-    .bullet-list { display: grid; gap: 6px; font-size: 0.84rem; }
-    .bullet-list div { line-height: 1.4; }
-    .link-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 0.5rem; }
-    .link-pill { border: 0.5px solid var(--border); background: var(--code-bg); color: var(--text); padding: 6px 10px; border-radius: 999px; font-size: 0.78rem; text-decoration: none; }
-    .link-pill:hover { filter: brightness(0.97); }
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:18px}
+.stat{
+  background:rgba(0,0,0,.18);border:1px solid var(--line);
+  border-radius:16px;padding:12px 14px;
+}
+.stat .v{font-family:"Baloo 2",cursive;font-size:clamp(21px,2.6vw,27px);line-height:1.2;font-weight:600}
+.stat .l{font-size:11px;color:var(--muted);letter-spacing:.04em}
 
-    .guide { display: flex; flex-direction: column; gap: 1rem; }
-    .guide-step { display: flex; gap: 12px; }
-    .guide-step .num { width: 24px; height: 24px; border-radius: 50%; background: var(--border); color: var(--accent); font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
-    .guide-step .body { flex: 1; }
-    .guide-step .body p { font-size: 0.85rem; margin-bottom: 4px; }
-    .note { font-size: 0.8rem; color: var(--muted); line-height: 1.4; margin-top: 0.5rem; }
-    .note a { color: var(--accent); text-decoration: underline; }
-    pre { background: var(--code-bg); border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 0.78rem; overflow-x: auto; color: var(--text); font-family: monospace; }
-    code { font-family: monospace; background: var(--code-bg); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
-  </style>
+.panel{
+  background:linear-gradient(170deg,var(--panel),#221330);
+  border:1px solid var(--line);border-radius:24px;
+  padding:clamp(20px,3vw,28px);
+}
+.panel-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.panel-title{font-family:"Baloo 2",cursive;font-size:26px;line-height:1.1;letter-spacing:-.02em}
+.panel-sub{font-family:"Caveat",cursive;font-size:20px;color:var(--muted)}
+.panel p{color:var(--muted);font-size:14px}
+.panel p + p{margin-top:10px}
+.panel strong{color:var(--text);font-weight:600}
+
+.mode-list{display:grid;gap:8px}
+.mode{
+  display:grid;grid-template-columns:34px minmax(0,1fr) auto;
+  gap:12px;align-items:center;
+  border:1px solid var(--line);border-radius:14px;
+  padding:10px 12px;background:rgba(0,0,0,.14);
+}
+.mode .n{
+  width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+  font-family:"Baloo 2",cursive;font-size:13px;color:var(--accent);
+  background:rgba(216,180,254,.08);border:1px solid rgba(216,180,254,.22);
+}
+.mode .what{font-size:13.5px;color:var(--text)}
+.mode .what small{display:block;color:var(--muted);font-size:11.5px;line-height:1.45}
+.tag{
+  font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:lowercase;
+  padding:3px 8px;border-radius:99px;white-space:nowrap;
+  border:1px solid var(--line);color:var(--muted);
+}
+.tag.wipe{color:var(--warn);border-color:rgba(255,208,138,.35);background:rgba(255,208,138,.08)}
+.tag.safe{color:var(--ok);border-color:rgba(167,243,201,.32);background:rgba(167,243,201,.07)}
+.tag.read{color:var(--blue);border-color:rgba(154,217,255,.3);background:rgba(154,217,255,.07)}
+
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.mini{
+  border:1px solid var(--line);border-radius:16px;
+  padding:14px 16px;background:rgba(0,0,0,.14);
+}
+.mini h3{
+  font-family:"Baloo 2",cursive;font-size:16px;letter-spacing:.01em;
+  margin-bottom:5px;color:var(--text);
+}
+.mini p{font-size:12.5px;line-height:1.55}
+.mini .k{font-family:"Caveat",cursive;font-size:19px;color:var(--accent)}
+
+.steps{display:grid;gap:12px}
+.step{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px}
+.step .num{
+  width:28px;height:28px;border-radius:50%;
+  display:grid;place-items:center;font-size:12px;font-weight:700;
+  color:var(--primary);border:1px solid rgba(255,143,201,.35);
+  background:rgba(255,143,201,.08);margin-top:2px;
+}
+.step h4{font-size:13.5px;font-weight:600;margin-bottom:5px}
+pre{
+  background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:11px;
+  padding:10px 13px;font-size:12px;line-height:1.7;color:var(--text);
+  overflow-x:auto;
+}
+pre .c{color:var(--muted)}
+.note{font-size:12px;color:var(--muted);margin-top:6px}
+.note b{color:var(--text)}
+
+.links{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.pill{
+  font-size:12.5px;border:1px solid var(--line);border-radius:999px;
+  padding:6px 12px;color:var(--text);background:rgba(255,240,251,.03);
+}
+.pill:hover{border-color:rgba(255,143,201,.45);color:var(--primary);text-decoration:none}
+
+.foot{
+  display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  border-top:1px dashed var(--line);padding-top:16px;
+  font-size:12px;color:var(--muted);
+}
+.foot .credit{display:flex;align-items:center;gap:6px}
+.foot a{color:var(--accent)}
+
+.fade{animation:fade .55s ease both}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+@media (max-width:900px){
+  .stage{grid-template-columns:1fr}
+  .side{position:static;grid-template-columns:1fr;gap:12px}
+  .profile{display:grid;grid-template-columns:62px minmax(0,1fr);gap:0 16px;align-items:center;padding:18px 18px 16px}
+  .avatar{grid-row:1 / span 2;margin-bottom:0}
+  .bio,.chips{grid-column:1 / -1}
+  .nav{grid-column:1 / -1;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+  .nav-label{grid-column:1 / -1}
+  .side-links,.side-credit{grid-column:1 / -1}
+}
+@media (max-width:620px){
+  .stage{width:min(var(--max),100% - 22px);padding-top:16px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .mode{grid-template-columns:30px minmax(0,1fr);gap:10px}
+  .mode .tag{grid-column:2;justify-self:start}
+  .hero p{font-size:13.5px}
+}
+@media (prefers-reduced-motion:reduce){
+  .fade{animation:none}
+  html{scroll-behavior:auto}
+}
+</style>
 </head>
 <body>
-<header>
-  <h1>cardnuke</h1>
-  <span class="sub">media utility dashboard</span>
-  <span id="gen-time"></span>
-</header>
-<main id="app"></main>
-
-<script>
-const now = new Date();
-document.getElementById('gen-time').textContent = 'generated ' + now.toLocaleString();
-const localMode = location.protocol === 'file:' ? 'local' : 'hosted';
-
-const data = {
-  stats: {
-    programs: 2,
-    modes: 9,
-    formatLevels: 4,
-    platforms: 'Linux + Windows',
-    mode: localMode
-  },
-  checks: [
-    { name: 'C++ build (cardnuke)', ok: true, reason: 'g++ compiled successfully' },
-    { name: 'Windows build (cardnuke_win)', ok: true, reason: 'Ready to compile on Windows' },
-    { name: 'Repo hygiene', ok: true, reason: 'Python deprecated' },
-    { name: 'Risk profile', ok: false, reason: 'Destructive by design; verify device first' }
-  ]
-};
-
-const app = document.getElementById('app');
-app.innerHTML = `
-  <section>
-    <h2>📊 Project Stats</h2>
-    <div class="stats">
-      <div class="stat">
-        <div class="val">${data.stats.programs}</div>
-        <div class="lbl">programs</div>
+<div class="stage">
+  <aside class="side">
+    <div class="profile">
+      <div class="avatar" aria-hidden="true">cn</div>
+      <div>
+        <h1 class="name">cardnuke</h1>
+        <div class="role">sd card first aid</div>
       </div>
-      <div class="stat">
-        <div class="val">${data.stats.modes}</div>
-        <div class="lbl">main modes</div>
+      <p class="bio">wipe, back up, recover and check SD cards and USB drives from one terminal. one card, one command, no guessing.</p>
+      <div class="chips">
+        <span class="chip pink">c++17</span>
+        <span class="chip">linux</span>
+        <span class="chip">windows port</span>
+        <span class="chip">local only</span>
       </div>
-      <div class="stat">
-        <div class="val">${data.stats.formatLevels}</div>
-        <div class="lbl">format levels</div>
-      </div>
-      <div class="stat">
-        <div class="val" style="font-size:1rem">${data.stats.platforms}</div>
-        <div class="lbl">platform support</div>
-      </div>
-      <div class="stat">
-        <div class="val" style="font-size:1rem">${data.stats.mode}</div>
-        <div class="lbl">local stat</div>
-      </div>
+      <nav class="nav" aria-label="Sections">
+        <div class="nav-label">jump to</div>
+        <a class="nav-item" href="#modes"><span class="key">1</span> modes</a>
+        <a class="nav-item" href="#safety"><span class="key">2</span> safety</a>
+        <a class="nav-item" href="#install"><span class="key">3</span> install</a>
+        <a class="nav-item" href="#ports"><span class="key">4</span> other builds</a>
+        <a class="nav-item" href="#notes"><span class="key">5</span> notes</a>
+      </nav>
     </div>
-  </section>
+    <div class="side-links">
+      <a class="ghost" href="https://github.com/Ivoryy06/cardnuke" target="_blank" rel="noopener">source ↗</a>
+      <a class="ghost" href="README.md" target="_blank">readme ↗</a>
+    </div>
+    <div class="side-credit">made by <a href="https://github.com/Ivoryy06">Ivoryy06</a> <span class="heart">♡</span></div>
+  </aside>
 
-  <section>
-    <h2>🔗 Connected Web + Program</h2>
-    <div class="bullet-list">
-      <div>The web dashboard documents and links directly to the executable tooling files.</div>
-      <div>Use this page for guidance, then run the same terminal workflow locally with root (Linux) or Administrator (Windows) privileges.</div>
-    </div>
-    <div class="link-row">
-      <a class="link-pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank">GitHub</a>
-      <a class="link-pill" href="./README.md" target="_blank">README</a>
-      <a class="link-pill" href="./cardnuke.cpp" target="_blank">cardnuke (Linux)</a>
-      <a class="link-pill" href="./cardnuke_win.cpp" target="_blank">cardnuke_win (Windows)</a>
-      <a class="link-pill" href="#contact">Contact</a>
-    </div>
-  </section>
+  <main>
+    <section class="hero fade">
+      <div class="eyebrow">terminal tool · v1</div>
+      <h1>make the card <em>behave.</em></h1>
+      <p>photographers reformat cards, back them up before a shoot, and try to rescue one that failed. cardnuke keeps all of that in one place, with a confirmation between you and anything that erases data.</p>
+      <div class="stats">
+        <div class="stat"><div class="v">8</div><div class="l">modes on linux</div></div>
+        <div class="stat"><div class="v">2</div><div class="l">native builds</div></div>
+        <div class="stat"><div class="v">0</div><div class="l">accounts or uploads</div></div>
+        <div class="stat"><div class="v">sha256</div><div class="l">checked backups</div></div>
+      </div>
+      <div class="hero-note">it asks before it destroys anything ♡</div>
+    </section>
 
-  <section>
-    <h2>⚡ C++ Implementation</h2>
-    <div class="bullet-list">
-      <div>- Written in C++ for maximum performance</div>
-      <div>- Two separate programs: Linux (cardnuke) and Windows (cardnuke_win.exe)</div>
-      <div>- Uses native APIs: Linux uses libmount/posix, Windows uses WinAPI</div>
-      <div>- No external dependencies on Windows</div>
-      <div>- Speed test uses O_DIRECT for true hardware speeds</div>
-      <div>- 8MB sequential writes for SD card page alignment</div>
-    </div>
-  </section>
+    <section class="panel fade" id="modes">
+      <div class="panel-head">
+        <h2 class="panel-title">what it can do</h2>
+        <span class="panel-sub">one command per job</span>
+      </div>
+      <div class="mode-list">
+        <div class="mode"><span class="n">1</span><span class="what">format <small>clears the partition table, makes one partition, formats it</small></span><span class="tag wipe">erases</span></div>
+        <div class="mode"><span class="n">2</span><span class="what">recover <small>starts PhotoRec and keeps the files you choose</small></span><span class="tag read">reads</span></div>
+        <div class="mode"><span class="n">3</span><span class="what">health <small>bad block scan, read-only by default</small></span><span class="tag safe">safe</span></div>
+        <div class="mode"><span class="n">4</span><span class="what">backup <small>saves the card to a .img with a checksum file</small></span><span class="tag safe">safe</span></div>
+        <div class="mode"><span class="n">5</span><span class="what">speed <small>read and write benchmark</small></span><span class="tag safe">safe</span></div>
+        <div class="mode"><span class="n">6</span><span class="what">info <small>model, size, partitions and mount points</small></span><span class="tag read">reads</span></div>
+        <div class="mode"><span class="n">7</span><span class="what">repair <small>runs the right filesystem checker</small></span><span class="tag wipe">rewrites</span></div>
+        <div class="mode"><span class="n">8</span><span class="what">restore <small>writes a backup back, after the size and checksum check</small></span><span class="tag wipe">erases</span></div>
+      </div>
+      <p style="margin-top:12px;font-size:12.5px">the windows build covers format, backup, restore, speed, info and eject. <a href="#ports">details below</a>.</p>
+    </section>
 
-  <section>
-    <h2>🔧 Mode Status</h2>
-    <div class="bullet-list">
-      <div><b>Stable:</b> format, recover, health, info, eject</div>
-      <div><b>Beta:</b> backup, restore, repair, speed</div>
-    </div>
-  </section>
+    <section class="panel fade" id="safety">
+      <div class="panel-head">
+        <h2 class="panel-title">safe by default</h2>
+        <span class="panel-sub">because it can erase drives</span>
+      </div>
+      <div class="grid-2">
+        <div class="mini">
+          <h3>type it back</h3>
+          <p>format, restore and repair stop and ask you to type the device path. <span class="k">--yes</span> skips that for scripts.</p>
+        </div>
+        <div class="mini">
+          <h3>leave the system alone</h3>
+          <p>it refuses any disk that holds <strong>/</strong>, <strong>/boot</strong>, <strong>/home</strong>, <strong>/usr</strong> or <strong>/var</strong>, and refuses disks that don't look removable.</p>
+        </div>
+        <div class="mini">
+          <h3>verify the backup</h3>
+          <p>backups write a SHA-256 beside the image. restore checks it, and checks the image fits, before writing anything.</p>
+        </div>
+        <div class="mini">
+          <h3>no shell</h3>
+          <p>commands are run as an argument list, so a strange device name or label can't turn into a command. <span class="k">--dry-run</span> shows the plan first.</p>
+        </div>
+      </div>
+      <p class="note">the speed and health checks read your card. the only raw write test is <span style="color:var(--warn)">--destructive</span>, and it asks first.</p>
+    </section>
 
-  <section>
-    <h2>⚖️ Pros + Cons</h2>
-    <div class="split">
-      <div class="mini">
-        <h3>Pros</h3>
-        <div class="bullet-list">
-          <div>- Written in C++ for maximum performance</div>
-          <div>- True hardware speed measurement</div>
-          <div>- Interactive mode with confirmations</div>
-          <div>- No dependencies on Windows</div>
-          <div>- Works for repeated SD/USB maintenance</div>
+    <section class="panel fade" id="install">
+      <div class="panel-head">
+        <h2 class="panel-title">install</h2>
+        <span class="panel-sub">linux, c++17</span>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="num">1</div>
+          <div>
+            <h4>get the code and build</h4>
+            <pre>git clone https://github.com/Ivoryy06/cardnuke.git
+cd cardnuke
+make</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <div>
+            <h4>install the helpers you need</h4>
+            <pre><span class="c"># format / repair / health / backup / recover</span>
+sudo pacman -S parted dosfstools exfatprogs e2fsprogs \
+  util-linux testdisk eject</pre>
+            <p class="note">on debian and friends, use <code>apt</code> with the same package names.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <div>
+            <h4>look before you touch</h4>
+            <pre>sudo ./cardnuke list
+sudo ./cardnuke /dev/sdb info</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">4</div>
+          <div>
+            <h4>then pick a job</h4>
+            <pre>sudo ./cardnuke /dev/sdb backup card.img
+sudo ./cardnuke /dev/sdb format exfat MYCARD
+sudo ./cardnuke /dev/sdb restore card.img</pre>
+            <p class="note"><b>whole device, not a partition.</b> use /dev/sdb or /dev/mmcblk0, never /dev/sdb1.</p>
+          </div>
         </div>
       </div>
-      <div class="mini">
-        <h3>Cons</h3>
-        <div class="bullet-list">
-          <div>- Destructive if wrong disk selected</div>
-          <div>- Some Linux features use external tools</div>
-          <div>- Windows build requires MinGW-w64</div>
-          <div>- Always verify device first</div>
-        </div>
+      <div class="links">
+        <a class="pill" href="https://github.com/Ivoryy06/cardnuke" target="_blank" rel="noopener">github ↗</a>
+        <a class="pill" href="README.md" target="_blank">full readme ↗</a>
+        <a class="pill" href="cardnuke.cpp" target="_blank">linux source</a>
+        <a class="pill" href="cardnuke_win.cpp" target="_blank">windows source</a>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section>
-    <h2>🩺 Current Checks</h2>
-    <div class="check-list">
-      ${data.checks.map(c => `
-        <div class="check-row">
-          <span class="icon">${c.ok ? '✅' : '⚠️'}</span>
-          <span class="name">${c.name}</span>
-          <span class="pill ${c.ok ? 'ok' : 'warn'}">${c.ok ? 'ok' : 'careful'}</span>
-          <span class="reason">${c.reason}</span>
+    <section class="panel fade" id="ports">
+      <div class="panel-head">
+        <h2 class="panel-title">other builds</h2>
+        <span class="panel-sub">same idea, different setup</span>
+      </div>
+      <div class="grid-3">
+        <div class="mini">
+          <h3>windows</h3>
+          <p><code>cardnuke_win.cpp</code> uses the WinAPI: format, backup, restore, speed, info, eject. refuses the windows system drive, validates labels, and warns before the speed test writes. build it with MinGW-w64 and run as administrator.</p>
         </div>
-      `).join('')}
-    </div>
-  </section>
+        <div class="mini">
+          <h3>python</h3>
+          <p><code>cardnuke.py</code> is the older interactive version. labels are checked before diskpart sees them and notifications are quoted safely. handy if you can't build c++.</p>
+        </div>
+        <div class="mini">
+          <h3>bash</h3>
+          <p><code>cardnuke.sh</code> is a small shell wrapper. it now refuses anything that isn't a block device and checks the system mount points before writing.</p>
+        </div>
+      </div>
+      <p class="note">these ports were reviewed with the linux tool but not built or tested on this machine. try them on a card you don't care about first.</p>
+    </section>
 
-  <section>
-    <h2>📦 Requirements</h2>
-    <div class="split">
-      <div class="mini">
-        <h3>Linux Build</h3>
-        <div class="bullet-list">
-          <div><b>Build:</b> g++ with C++17</div>
-          <div><b>Runtime:</b> parted, dd, mkfs.*, fsck, badblocks, eject</div>
-          <div><b>Access:</b> sudo (root)</div>
+    <section class="panel fade" id="notes">
+      <div class="panel-head">
+        <h2 class="panel-title">notes</h2>
+        <span class="panel-sub">the fine print</span>
+      </div>
+      <div class="grid-2">
+        <div class="mini">
+          <h3>fat32 has a ceiling</h3>
+          <p>windows can't make a FAT32 partition bigger than 32 GB. use exFAT or NTFS for larger cards.</p>
+        </div>
+        <div class="mini">
+          <h3>recovery isn't magic</h3>
+          <p>PhotoRec works best before you write anything new to the card. stop using it and recover first.</p>
+        </div>
+        <div class="mini">
+          <h3>the speed test is honest</h3>
+          <p>reads bypass the cache where the system allows it. on a mounted card the write test uses a temporary file and removes it.</p>
+        </div>
+        <div class="mini">
+          <h3>keep a backup</h3>
+          <p>anything that matters should exist in two places. that's the whole reason mode 4 exists.</p>
         </div>
       </div>
-      <div class="mini">
-        <h3>Windows Build</h3>
-        <div class="bullet-list">
-          <div><b>Build:</b> MinGW-w64 with C++17</div>
-          <div><b>Runtime:</b> None (uses WinAPI)</div>
-          <div><b>Access:</b> Administrator</div>
-        </div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section>
-    <h2>🐧 Linux Install</h2>
-    <div class="guide">
-      <div class="guide-step">
-        <div class="num">1</div>
-        <div class="body">
-          <p>Clone the repository</p>
-          <pre>git clone https://github.com/Ivoryy06/cardnuke.git ~/cardnuke</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">2</div>
-        <div class="body">
-          <p>Install dependencies</p>
-          <pre>sudo pacman -S gcc dosfstools exfatprogs e2fsprogs parted util-linux testdisk eject</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">3</div>
-        <div class="body">
-          <p>Build the C++ binary</p>
-          <pre>cd ~/cardnuke
-make linux</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">4</div>
-        <div class="body">
-          <p>Run as root</p>
-          <pre>cd ~/cardnuke
-sudo ./cardnuke</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">5</div>
-        <div class="body">
-          <p>Or use command-line mode</p>
-          <pre>sudo ./cardnuke /dev/sdb 5    # speed test</pre>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>🪟 Windows Tutorial</h2>
-    <div class="guide">
-      <div class="guide-step">
-        <div class="num">1</div>
-        <div class="body">
-          <p>Download the source file</p>
-          <p class="note">Get <code>cardnuke_win.cpp</code> from the repository (or copy it from the folder if you have it)</p>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">2</div>
-        <div class="body">
-          <p>Install MinGW-w64 compiler</p>
-          <p class="note">Download MSYS2 from <a href="https://www.msys2.org" target="_blank" style="color: var(--accent)">msys2.org</a>, then run in MSYS2 terminal:</p>
-          <pre>pacman -S mingw-w64-x86_64-gcc</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">3</div>
-        <div class="body">
-          <p>Compile the program</p>
-          <p class="note">Open "MinGW Win64" from your Start Menu (or use MSYS2 terminal), then:</p>
-          <pre>g++ -O2 -Wall -std=c++17 -o cardnuke_win.exe cardnuke_win.cpp -lws2_32 -lsetupapi</pre>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">4</div>
-        <div class="body">
-          <p>Run as Administrator</p>
-          <p class="note">Right-click Command Prompt → Run as Administrator, or press <code>Win+X</code> → Terminal (Admin)</p>
-        </div>
-      </div>
-      <div class="guide-step">
-        <div class="num">5</div>
-        <div class="body">
-          <p>Use the program</p>
-          <p class="note">Navigate to where you saved <code>cardnuke_win.exe</code> and run:</p>
-          <pre>cd Downloads\cardnuke
-
-cardnuke_win.exe --list           List all drives
-cardnuke_win.exe D 1             Format drive D: (NTFS)
-cardnuke_win.exe D 1 exfat mycard  Format drive D: as exFAT with label "mycard"
-cardnuke_win.exe D 2 backup.img   Backup D: to backup.img file
-cardnuke_win.exe D 4              Speed test drive D:</pre>
-        </div>
-      </div>
-    </div>
-    <div class="note">
-      <b>Important:</b> Always run as Administrator. The drive letter is just the letter (D, E, F) without colon.
-    </div>
-  </section>
-
-  <section>
-    <h2>❓ FAQ</h2>
-    <div class="bullet-list">
-      <div><b>"Access denied" error?</b><br>Run CMD as Administrator (right-click → Run as administrator)</div>
-      <div><b>"Cannot open drive"?</b><br>Make sure the drive is not in use. Close any open files/folders on that drive.</div>
-      <div><b>Format not working?</b><br>Try closing all programs that might be using the drive, then try again.</div>
-      <div><b>Backup is slow?</b><br>Normal for USB 2.0 or slow cards. USB 3.0 should be 50-200 MB/s.</div>
-      <div><b>What filesystem to use?</b><br>NTFS for large files (64GB+), FAT32 for compatibility, exFAT for modern cards.</div>
-    </div>
-  </section>
-
-  <section id="contact">
-    <h2>📬 Contact</h2>
-    <div class="bullet-list">
-      <div><b>Instagram:</b> @kizunee.cr3</div>
-      <div><b>Discord:</b> @kiz.une</div>
-    </div>
-  </section>
-`;
-</script>
+    <footer class="foot">
+      <span>cardnuke · expect sharp edges · <a href="https://github.com/Ivoryy06/cardnuke">source</a></span>
+      <span class="credit">made by <a href="https://github.com/Ivoryy06">Ivoryy06</a> <span class="heart">♡</span></span>
+    </footer>
+  </main>
+</div>
 </body>
 </html>

@@ -1,3 +1,7 @@
+"""cardnuke (Python): wipe, recover, check, back up and restore SD cards.
+
+made by Ivoryy06 ♡
+"""
 
 import ctypes
 import datetime
@@ -6,6 +10,7 @@ import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -79,6 +84,41 @@ def normalize_windows_disk(dev):
             raise ValueError("use a disk number like 2 or \\\\.\\PhysicalDrive2")
         num = int(m.group(1))
     return {"number": num, "path": rf"\\.\PhysicalDrive{num}"}
+
+
+def safe_label(label, maxlen=32):
+    # The label goes into a diskpart script and mkfs arguments, so keep it boring.
+    label = (label or "").strip()
+    if not label:
+        return ""
+    if len(label) > maxlen:
+        raise ValueError(f"volume labels can be at most {maxlen} characters")
+    if not re.fullmatch(r"[A-Za-z0-9 _-]+", label):
+        raise ValueError("volume labels can only use letters, numbers, spaces, - and _")
+    return label
+
+
+def ps_quote(text):
+    return "'" + str(text).replace("'", "''") + "'"
+
+
+def check_linux_device(dev):
+    try:
+        info = os.stat(dev)
+    except OSError as e:
+        raise ValueError(f"can't find {dev}: {e}") from e
+    if not stat.S_ISBLK(info.st_mode):
+        raise ValueError(f"{dev} is not a block device — give the whole device, like /dev/sdb")
+    system_mounts = ("/", "/boot", "/boot/efi", "/home", "/usr", "/var")
+    try:
+        with open("/proc/mounts", encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] in system_mounts and parts[0].startswith(dev):
+                    raise ValueError(f"refusing: {dev} holds {parts[1]}, part of the running system")
+    except OSError:
+        pass
+    return dev
 
 
 def diskpart(script, *, check=False):
@@ -346,7 +386,7 @@ def notify(msg):
     if WIN:
         powershell(
             "Add-Type -AssemblyName System.Windows.Forms;"
-            f'[System.Windows.Forms.MessageBox]::Show("{msg}","cardnuke") | Out-Null'
+            f"[System.Windows.Forms.MessageBox]::Show({ps_quote(msg)},'cardnuke') | Out-Null"
         )
         return
     if shutil.which("notify-send"):
@@ -466,6 +506,10 @@ def ensure_windows_format_supported(number, fs, lf):
 
 
 def do_format(dev, fs, label, lf):
+    if WIN:
+        label = safe_label(label, 32 if fs == "ntfs" else 11)
+    else:
+        label = safe_label(label, 11 if fs in ("fat32", "exfat") else 16)
     log(f"→ Formatting as {fs}" + (f" (label: {label})" if label else "") + "...", lf)
     if WIN:
         info = normalize_windows_disk(dev)
@@ -650,6 +694,17 @@ def restore(dev, lf):
     img = input("Path to .img file to restore: ").strip()
     if not os.path.isfile(img):
         log(f"  File not found: {img}", lf)
+        return
+    image_size = os.path.getsize(img)
+    target_size = 0
+    if WIN:
+        target_size = physical_drive_size(normalize_windows_disk(dev)["path"])
+    else:
+        r = run(["blockdev", "--getsize64", dev])
+        if r.returncode == 0 and r.stdout.strip().isdigit():
+            target_size = int(r.stdout.strip())
+    if target_size and image_size > target_size:
+        log("  The image is bigger than the device. Nothing was written.", lf)
         return
     confirm = input(f"Overwriting ALL data on {dev} with {img}. Type YES: ")
     if confirm != "YES":
@@ -864,12 +919,14 @@ def main():
 
     example = "disk number or \\\\.\\PhysicalDriveN" if WIN else "/dev/sdb"
     dev = sys.argv[1] if len(sys.argv) > 1 else input(f"\nEnter device ({example}): ").strip()
-    if WIN:
-        try:
+    try:
+        if WIN:
             normalize_windows_disk(dev)
-        except ValueError as e:
-            log(f"Invalid Windows device: {e}", lf)
-            return
+        else:
+            check_linux_device(dev)
+    except ValueError as e:
+        log(f"Invalid device: {e}", lf)
+        return
     log(f"Device: {dev}", lf)
 
     print("\nMode:")
@@ -881,6 +938,7 @@ def main():
     print("  [6] info    - show card info")
     print("  [7] repair  - fix corrupted filesystem (no wipe)")
     print("  [8] restore - flash a .img backup back to card")
+    print("\n  made by Ivoryy06 ♡")
     mode = input("Choose [1-8] (default 1): ").strip() or "1"
     log(f"Mode: {mode}", lf)
 
@@ -951,7 +1009,7 @@ def main():
         print(f"\nLog saved to: {lf}")
         notify(f"cardnuke done: {dev} formatted as {fs}")
         eject(dev, lf)
-    except (RuntimeError, subprocess.CalledProcessError, OSError) as e:
+    except (RuntimeError, ValueError, subprocess.CalledProcessError, OSError) as e:
         log(f"ERROR: {e}", lf)
         sys.exit(1)
 
